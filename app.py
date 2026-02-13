@@ -32,7 +32,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 @st.cache_data(ttl=600)
 def load_data():
     data = conn.read(ttl=0) 
-    
     if data is None or data.empty:
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
@@ -119,16 +118,18 @@ with m3:
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
 
-    # 1. Pie Chart PIC (Kiri)
+    # 1. Pie Chart PIC (Kiri) - Menampilkan Nama PIC
     with g1:
         st.markdown("<p style='text-align:center; font-weight:bold;'>Workload by PIC</p>", unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts().reset_index()
         pic_counts.columns = ['PIC', 'Count']
         fig_pic = px.pie(pic_counts, values='Count', names='PIC', hole=0.4)
+        # Tambahan: Tampilkan label Nama + Persentase
+        fig_pic.update_traces(textinfo='label+percent', textposition='inside')
         fig_pic.update_layout(height=300, margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
         st.plotly_chart(fig_pic, use_container_width=True)
 
-    # 2. Pie Chart Status (Tengah)
+    # 2. Pie Chart Status (Tengah) - Menampilkan Nama Status
     with g2:
         st.markdown("<p style='text-align:center; font-weight:bold;'>Status Distribution</p>", unsafe_allow_html=True)
         status_counts = df_display['Status'].value_counts().reset_index()
@@ -138,6 +139,8 @@ if not df_display.empty:
             color='Status',
             color_discrete_map={'Complete': '#22c55e', 'Outstanding': '#ef4444', 'On Process': '#f59e0b'}
         )
+        # Tambahan: Tampilkan label Status + Persentase
+        fig_status.update_traces(textinfo='label+percent', textposition='inside')
         fig_status.update_layout(height=300, margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
         st.plotly_chart(fig_status, use_container_width=True)
 
@@ -157,7 +160,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=500,
-    key="editor_nhm_charts_v1",
+    key="editor_nhm_charts_vFinal",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
@@ -180,10 +183,8 @@ if col_save.button("💾 SIMPAN & UPDATE LIST"):
         else:
             final_df = to_save
         final_df = final_df.dropna(how='all')
-        
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
-
         conn.update(data=final_df)
         refresh_all_data()
         st.success("Berhasil Sinkronisasi!")
