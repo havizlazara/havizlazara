@@ -69,7 +69,7 @@ with col_text:
     st.markdown("""
         <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
-            <h2 class="giant-sub">Supply Chain & Logistic Departemen</h2>
+            <h2 class="giant-sub">Supply Chain & Logistics Departement</h2>
         </div>
     """, unsafe_allow_html=True)
 
@@ -140,7 +140,7 @@ edited_data = st.data_editor(
 # --- 7. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
-if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
+if col_save.button("💾 SIMPAN & UPDATE LIST"):
     try:
         to_save = edited_data.reset_index(drop=True)
         if f_fleet or f_unit or f_status or search_query:
