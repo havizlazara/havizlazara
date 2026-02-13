@@ -3,30 +3,11 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import io
 import os
-import streamlit.components.v1 as components
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. JAVASCRIPT & CSS UNTUK SCROLL BUTTONS ---
-def add_scroll_buttons():
-    components.html(
-        """
-        <div id="scroll-btns" style="position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 9999;">
-            <button onclick="window.parent.window.scrollTo({top: 0, behavior: 'smooth'})" 
-                style="background-color: #1f4e79; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                ▲
-            </button>
-            <button onclick="window.parent.window.scrollTo({top: window.parent.document.body.scrollHeight, behavior: 'smooth'})" 
-                style="background-color: #1f4e79; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                ▼
-            </button>
-        </div>
-        """,
-        height=0,
-    )
-
-# --- 2. CUSTOM CSS ---
+# --- 1. CSS CUSTOM (TERMASUK TOMBOL SCROLL STABIL) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -40,11 +21,37 @@ st.markdown("""
     }
     .giant-title { font-size: 50px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
     .giant-sub { font-size: 25px; color: #4a5568; margin: 0; font-weight: 600; }
+    
+    /* Tombol Scroll Melayang */
+    .scroll-btn {
+        position: fixed;
+        right: 30px;
+        width: 50px;
+        height: 50px;
+        background-color: #1f4e79;
+        color: white !important;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 50px;
+        font-size: 20px;
+        cursor: pointer;
+        z-index: 99999;
+        text-decoration: none;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        border: none;
+    }
+    .scroll-top { bottom: 90px; }
+    .scroll-bottom { bottom: 30px; }
+    .scroll-btn:hover { background-color: #2c6ca5; transform: scale(1.1); }
+    
     .stButton>button { width: 100%; background-color: #1f4e79; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; }
     </style>
+    
+    <a href="#dashboard-monitoring-purchase-order-nhm" class="scroll-btn scroll-top">▲</a>
+    <a href="#pt-nusa-halmahera-minerals-scm-division-2026" class="scroll-btn scroll-bottom">▼</a>
     """, unsafe_allow_html=True)
 
-# --- 3. KONEKSI GOOGLE SHEETS ---
+# --- 2. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
@@ -53,7 +60,7 @@ def load_data():
         cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # Perbaikan format angka (Material, PO No, Resv)
+    # Perbaikan format angka (Material, PO No, Resv) - Menghilangkan .0
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
@@ -78,8 +85,7 @@ except Exception as e:
     st.error(f"Koneksi Database Gagal: {e}")
     st.stop()
 
-# --- 4. HEADER & NAVIGASI ---
-add_scroll_buttons() # Menambahkan tombol scroll melayang
+# --- 3. HEADER ---
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
     if os.path.exists("NHM.jpg"): st.image("NHM.jpg", use_container_width=True)
@@ -92,7 +98,7 @@ with col_text:
         </div>
     """, unsafe_allow_html=True)
 
-# --- 5. FILTER ---
+# --- 4. FILTER ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
@@ -114,7 +120,7 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 6. SUMMARY ---
+# --- 5. SUMMARY ---
 st.markdown(f"""
 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
     <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
@@ -132,7 +138,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. TABEL DATABASE ---
+# --- 6. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
@@ -143,7 +149,7 @@ edited_data = st.data_editor(
     use_container_width=True,
     hide_index=False,
     num_rows="dynamic",
-    key="editor_nhm_scroll_v1",
+    key="editor_nhm_scroll_final",
     column_config={
         "PIC": st.column_config.TextColumn("PIC", width=120),
         "Material": st.column_config.TextColumn("Material", width=120),
@@ -154,7 +160,7 @@ edited_data = st.data_editor(
     }
 )
 
-# --- 8. TOMBOL SIMPAN ---
+# --- 7. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
@@ -165,21 +171,20 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
             final_df = pd.concat([df_hidden, to_save]).reset_index(drop=True)
         else:
             final_df = to_save
-
         final_df = final_df.dropna(how='all')
-        
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
-
         conn.update(data=final_df)
         st.cache_data.clear()
-        st.success("Tersimpan!")
+        st.success("Berhasil Tersimpan!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal: {e}")
 
-# --- 9. EXPORT ---
+# --- 8. EXPORT ---
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
 col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
+
+st.markdown("<p style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</p>", unsafe_allow_html=True)
