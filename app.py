@@ -21,83 +21,61 @@ st.markdown("""
     }
     .giant-title { font-size: 60px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
     .giant-sub { font-size: 30px; color: #4a5568; margin: 0; font-weight: 600; }
-    
-    .metric-card-custom {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        padding: 12px 25px;
-        border-radius: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .metric-label-custom { font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-    .metric-value-custom { font-size: 28px; font-weight: 800; color: #1f4e79; }
-    
-    .stButton>button {
-        width: 100%;
-        background-color: #1f4e79;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-        height: 3.5em;
-    }
+    .stButton>button { width: 100%; background-color: #1f4e79; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 1. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=5)
 def load_data():
-    # ttl=0 memastikan data mentah diambil langsung dari Sheets tanpa cache internal
-    return conn.read(ttl=0)
+    data = conn.read(ttl=0)
+    if data is None or data.empty:
+        # Jika benar-benar kosong, buat DataFrame dengan header standar
+        return pd.DataFrame(columns=['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status'])
+    
+    # PERBAIKAN: Konversi kolom tanggal agar tidak menyebabkan StreamlitAPIException
+    if 'Doc Date' in data.columns:
+        data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
+    if 'Qty' in data.columns:
+        data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
+        
+    return data
 
 try:
     df_master = load_data()
-    # Pastikan data tidak kosong untuk menghindari error fungsi pandas
-    if df_master.empty:
-        st.warning("Database Google Sheets kosong. Silakan isi baris pertama dengan header kolom.")
-        st.stop()
 except Exception as e:
-    st.error(f"Gagal memuat database: {e}")
-    st.info("Saran: Periksa link di Secrets dan pastikan akses Google Sheets adalah 'Editor'.")
+    st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
 # --- 2. HEADER ---
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
-    if os.path.exists("NHM.jpg"):
-        st.image("NHM.jpg", use_container_width=True)
+    if os.path.exists("NHM.jpg"): st.image("NHM.jpg", use_container_width=True)
 
 with col_text:
-    st.markdown(f"""
+    st.markdown("""
         <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 180px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
             <h2 class="giant-sub">Supply Chain & Logistic Departemen</h2>
         </div>
     """, unsafe_allow_html=True)
 
-st.markdown("<hr style='border: 1.5px solid #1f4e79; opacity: 0.15; margin-bottom: 25px;'>", unsafe_allow_html=True)
-
-# --- 3. FILTER & SEARCH (ANTI-KEYERROR) ---
+# --- 3. FILTER & SEARCH ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
     def get_clean_opts(column_name):
-        # Proteksi: Cek apakah nama kolom ada di Google Sheets
         if column_name in df_master.columns:
             return sorted(df_master[column_name].dropna().astype(str).unique())
-        else:
-            st.error(f"Kolom '{column_name}' tidak ditemukan di Google Sheets Anda!")
-            return []
+        return []
     
     f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
-# Logika Filter untuk Tampilan
+# Logika Filter
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
@@ -107,62 +85,66 @@ if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
 # --- 4. SUMMARY ---
 m1, m2, m3 = st.columns(3)
-with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Items</span><span class='metric-value-custom'>{len(df_display)}</span></div>", unsafe_allow_html=True)
-with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_display[df_display['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
-with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_display[df_display['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div style="display: flex; gap: 10px; margin-bottom: 20px;">
+    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+        <div style="color:#64748b; font-size:12px; font-weight:bold;">TOTAL ITEMS</div>
+        <div style="font-size:24px; font-weight:bold; color:#1f4e79;">{len(df_display)}</div>
+    </div>
+    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+        <div style="color:#64748b; font-size:12px; font-weight:bold;">OUTSTANDING</div>
+        <div style="font-size:24px; font-weight:bold; color:#ef4444;">{len(df_display[df_display['Status'] == 'Outstanding'])}</div>
+    </div>
+    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+        <div style="color:#64748b; font-size:12px; font-weight:bold;">COMPLETE</div>
+        <div style="font-size:24px; font-weight:bold; color:#22c55e;">{len(df_display[df_display['Status'] == 'Complete'])}</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE ---
-st.markdown("### 📋 Database Monitoring (Real-time Sync)")
-# Jika sedang difilter, yang diedit adalah df_display. Jika tidak, df_master.
+# --- 5. TABEL DATABASE (DENGAN PERBAIKAN DATA_EDITOR) ---
+st.markdown("### 📋 Database Monitoring")
+
+# Pastikan kita mengirim data yang konsisten tipenya ke editor
 edited_data = st.data_editor(
     df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="realtime_vfinal_fix",
+    key="editor_fix_v5",
     column_config={
+        "Fleet": st.column_config.TextColumn(width="medium"),
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
-        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
+        "Qty": st.column_config.NumberColumn(width="small", format="%d"),
+        "Doc Date": st.column_config.DateColumn("Date", width="medium", format="DD/MM/YYYY"),
+        "Status": st.column_config.SelectboxColumn(options=["Complete", "Outstanding", "On Process"], width="medium"),
     }
 )
 
-# --- 6. LOGIKA SIMPAN (SAFE SYNC) ---
+# --- 6. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Jika user mengedit saat filter aktif, gabungkan kembali dengan data yang tersembunyi
+        # Sinkronisasi data yang di-filter kembali ke master
         if f_fleet or f_unit or f_status or search_query:
-            df_hidden = df_master[~df_master.index.isin(df_display.index)]
-            final_df = pd.concat([df_hidden, edited_data]).reset_index(drop=True)
+            df_not_in_filter = df_master[~df_master.index.isin(df_display.index)]
+            final_df = pd.concat([df_not_in_filter, edited_data]).reset_index(drop=True)
         else:
             final_df = edited_data
 
-        # Bersihkan baris kosong
+        # Hapus baris kosong dan kirim ke Cloud
         final_df = final_df.dropna(how='all')
-        
-        # Kirim ke Google Sheets
         conn.update(data=final_df)
         
-        # Bersihkan Cache dan Rerun
         st.cache_data.clear()
-        st.success("Data Berhasil Disimpan & Sinkron!")
+        st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
 
 # --- 7. EXPORT ---
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
-
-col_export.download_button(
-    label="📊 EXPORT EXCEL",
-    data=to_excel(df_display),
-    file_name='NHM_Monitoring_PO.xlsx',
-    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-)
-
-st.markdown("<p style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</p>", unsafe_allow_html=True)
+excel_data = io.BytesIO()
+with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
+    df_display.to_excel(writer, index=False)
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Monitoring.xlsx')
