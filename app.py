@@ -76,18 +76,25 @@ with col_text:
 
 st.markdown("<hr style='border: 1.5px solid #1f4e79; opacity: 0.15; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# --- 3. FILTER & SEARCH ---
+# --- 3. FILTER & SEARCH (VERSI ANTI-ERROR) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
     def get_clean_opts(column_name):
-        return sorted(df_master[column_name].dropna().astype(str).unique())
+        # Cek apakah kolom benar-benar ada di database
+        if column_name in df_master.columns:
+            return sorted(df_master[column_name].dropna().astype(str).unique())
+        else:
+            # Jika kolom tidak ada, tampilkan pesan peringatan dan return list kosong
+            st.warning(f"Kolom '{column_name}' tidak ditemukan di Google Sheets!")
+            return []
     
+    # Memanggil opsi dengan nama kolom yang sudah disesuaikan di Google Sheets
     f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
-
+    
 # LOGIKA FILTER (Untuk Tampilan Saja)
 df_display = df_master.copy()
 if search_query:
