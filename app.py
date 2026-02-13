@@ -29,28 +29,23 @@ st.markdown("""
 # --- 2. KONEKSI GOOGLE SHEETS DENGAN CACHING ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Menambahkan cache selama 10 menit (600 detik) untuk menghemat kuota API
 @st.cache_data(ttl=600)
 def load_data():
-    # Mengambil data dari Google Sheets
     data = conn.read(ttl=0) 
     
     if data is None or data.empty:
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # Perbaikan format angka (Menghilangkan .0)
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
-    # Perbaikan format tanggal
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
     
-    # Standarisasi kolom teks
     str_cols = ['Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
@@ -58,7 +53,6 @@ def load_data():
             
     return data
 
-# Fungsi untuk membersihkan cache secara manual saat simpan data
 def refresh_all_data():
     st.cache_data.clear()
 
@@ -95,7 +89,6 @@ with st.container():
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
-# Logika Filter (dilakukan di memori, bukan di API)
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
@@ -103,7 +96,7 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. SUMMARY & GRAFIK ---
+# --- 5. SUMMARY & VISUALIZATIONS ---
 st.markdown("### 📊 Dashboard Summary")
 m1, m2, m3 = st.columns(3)
 with m1:
@@ -122,16 +115,40 @@ with m3:
         <div style="font-size:24px; font-weight:bold; color:#22c55e;">{len(df_display[df_display['Status'] == 'Complete'])}</div>
     </div>""", unsafe_allow_html=True)
 
+# --- GRAFIK (3 KOLOM) ---
 if not df_display.empty:
-    status_counts = df_display['Status'].value_counts().reset_index()
-    status_counts.columns = ['Status', 'Count']
-    fig = px.pie(
-        status_counts, values='Count', names='Status', hole=0.4,
-        color='Status',
-        color_discrete_map={'Complete': '#22c55e', 'Outstanding': '#ef4444', 'On Process': '#f59e0b'}
-    )
-    fig.update_layout(height=350, margin=dict(t=20, b=0, l=0, r=0), legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center"))
-    st.plotly_chart(fig, use_container_width=True)
+    g1, g2, g3 = st.columns(3)
+
+    # 1. Pie Chart PIC (Kiri)
+    with g1:
+        st.markdown("<p style='text-align:center; font-weight:bold;'>Workload by PIC</p>", unsafe_allow_html=True)
+        pic_counts = df_display['PIC'].value_counts().reset_index()
+        pic_counts.columns = ['PIC', 'Count']
+        fig_pic = px.pie(pic_counts, values='Count', names='PIC', hole=0.4)
+        fig_pic.update_layout(height=300, margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        st.plotly_chart(fig_pic, use_container_width=True)
+
+    # 2. Pie Chart Status (Tengah)
+    with g2:
+        st.markdown("<p style='text-align:center; font-weight:bold;'>Status Distribution</p>", unsafe_allow_html=True)
+        status_counts = df_display['Status'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Count']
+        fig_status = px.pie(
+            status_counts, values='Count', names='Status', hole=0.4,
+            color='Status',
+            color_discrete_map={'Complete': '#22c55e', 'Outstanding': '#ef4444', 'On Process': '#f59e0b'}
+        )
+        fig_status.update_layout(height=300, margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        st.plotly_chart(fig_status, use_container_width=True)
+
+    # 3. Bar Chart Unit (Kanan)
+    with g3:
+        st.markdown("<p style='text-align:center; font-weight:bold;'>Top 5 Units</p>", unsafe_allow_html=True)
+        unit_counts = df_display['Unit no'].value_counts().nlargest(5).reset_index()
+        unit_counts.columns = ['Unit', 'Count']
+        fig_unit = px.bar(unit_counts, x='Unit', y='Count', color='Unit', text_auto=True)
+        fig_unit.update_layout(height=300, margin=dict(t=0, b=0, l=0, r=0), showlegend=False, xaxis_title=None, yaxis_title=None)
+        st.plotly_chart(fig_unit, use_container_width=True)
 
 # --- 6. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
@@ -140,7 +157,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=500,
-    key="editor_nhm_final_vCache",
+    key="editor_nhm_charts_v1",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
@@ -167,12 +184,8 @@ if col_save.button("💾 SIMPAN & UPDATE LIST"):
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
 
-        # Push data ke Sheets
         conn.update(data=final_df)
-        
-        # PENTING: Hapus cache setelah simpan agar data terbaru muncul
         refresh_all_data()
-        
         st.success("Berhasil Sinkronisasi!")
         st.rerun()
     except Exception as e:
