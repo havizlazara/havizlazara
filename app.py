@@ -7,7 +7,7 @@ import os
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- CUSTOM CSS: HEADER SEJAJAR & TAMPILAN PREMIUM ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -45,27 +45,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. KONEKSI GOOGLE SHEETS (REAL-TIME DATABASE) ---
+# --- 1. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # ttl=0 memastikan data selalu mengambil yang terbaru dari Cloud tanpa cache
+    # Mengambil data terbaru tanpa cache (ttl=0)
     return conn.read(ttl=0)
 
-# Memuat data dari Google Sheets
 try:
     df_master = load_data()
 except Exception as e:
-    st.error("Gagal terhubung ke Google Sheets. Pastikan Secrets sudah disetting.")
+    st.error("Gagal memuat database. Pastikan Secrets sudah disetel dan Header Google Sheets sudah benar.")
     st.stop()
 
-# --- 2. HEADER SEJAJAR ---
+# --- 2. HEADER ---
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
     if os.path.exists("NHM.jpg"):
         st.image("NHM.jpg", use_container_width=True)
-    else:
-        st.write("### [LOGO NHM]")
 
 with col_text:
     st.markdown(f"""
@@ -77,9 +74,9 @@ with col_text:
 
 st.markdown("<hr style='border: 1.5px solid #1f4e79; opacity: 0.15; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# --- 3. FILTER & SEARCH (DROPDOWN DINAMIS) ---
+# --- 3. FILTER & SEARCH ---
 with st.container():
-    search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data apapun...")
+    search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
     def get_clean_opts(column_name):
@@ -97,59 +94,55 @@ if f_fleet: df_filtered = df_filtered[df_filtered["Fleet"].isin(f_fleet)]
 if f_unit: df_filtered = df_filtered[df_filtered["Unit no"].isin(f_unit)]
 if f_status: df_filtered = df_filtered[df_filtered["Status"].isin(f_status)]
 
-# --- 4. SUMMARY (DYNAMIC) ---
+# --- 4. SUMMARY ---
 m1, m2, m3 = st.columns(3)
 with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Items</span><span class='metric-value-custom'>{len(df_filtered)}</span></div>", unsafe_allow_html=True)
 with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_filtered[df_filtered['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
 with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_filtered[df_filtered['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
 
-st.write("")
-
-# --- 5. TABEL EDITABLE (SYNC KE CLOUD) ---
+# --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring (Real-time Sync)")
-
-# Pastikan urutan kolom sesuai dengan Google Sheets Anda
 edited_df = st.data_editor(
     df_filtered,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="realtime_editor_v4",
+    key="realtime_vfinal",
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
-        "Qty": st.column_config.NumberColumn(format="%d"),
     }
 )
 
-# --- 6. TOMBOL AKSI ---
+# --- 6. TOMBOL SIMPAN KE CLOUD ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Menghapus baris yang benar-benar kosong sebelum simpan
+        # Menghapus baris kosong
         final_df = edited_df.dropna(how='all')
         
         # Kirim perubahan ke Google Sheets
         conn.update(data=final_df)
         
-        # Berhasil
-        st.success("Data Berhasil Disimpan di Database Pusat!")
+        # PENTING: Bersihkan cache agar refresh mengambil data terbaru
+        st.cache_data.clear()
+        
+        st.success("Data Berhasil Tersinkronisasi!")
         st.rerun()
     except Exception as e:
-        st.error(f"Gagal Menyimpan: {e}")
+        st.error(f"Gagal Menyimpan: {e}. Cek apakah akses Sheets sudah 'Editor'.")
 
-# Fungsi Export Excel
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='PO_NHM')
+        df.to_excel(writer, index=False)
     return output.getvalue()
 
 col_export.download_button(
     label="📊 EXPORT EXCEL",
     data=to_excel(df_filtered),
-    file_name='NHM_Monitoring_Realtime.xlsx',
+    file_name='NHM_Monitoring_PO.xlsx',
     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 )
 
