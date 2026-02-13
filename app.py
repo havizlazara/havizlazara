@@ -10,7 +10,7 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CUSTOM CSS (GIANT TITLE & GLOW EFFECT) ---
+# --- 1. CUSTOM CSS (MODERN & BORDERED DESIGN) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -23,7 +23,7 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
     
-    /* Kembalikan Giant Title seperti sebelumnya */
+    /* Judul Raksasa */
     .giant-title { font-size: 50px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
     .giant-sub { font-size: 25px; color: #4a5568; margin: 0; font-weight: 600; }
     
@@ -39,19 +39,30 @@ st.markdown("""
         mix-blend-mode: multiply;
     }
 
-    /* Efek Glowing pada Card Summary */
+    /* Box Metrik yang Diperkecil (Width: Fit Content) */
+    .metric-container {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 25px;
+    }
     .metric-card {
         background: #ffffff;
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: 0 0 15px rgba(31, 78, 121, 0.1);
+        border-radius: 10px;
+        padding: 10px 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         border: 1px solid #e2e8f0;
         text-align: center;
-        transition: 0.3s;
+        min-width: 180px; /* Ukuran diperkecil */
+        border-bottom: 4px solid #1f4e79;
     }
-    .metric-card:hover {
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); /* Glow effect on hover */
-        transform: translateY(-3px);
+
+    /* Box Pembatas Grafik */
+    .chart-box {
+        background-color: #ffffff;
+        border: 2px solid #e2e8f0;
+        border-radius: 15px;
+        padding: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.02);
     }
 
     .stButton>button { 
@@ -96,7 +107,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 3. HEADER (GIANT TITLE + LOGO) ---
+# --- 3. HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -133,71 +144,82 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. VISUALISASI (GLOWING & EMBOSS EFFECT) ---
-st.markdown("### 📈 Analytics Overview")
-m1, m2, m3 = st.columns(3)
-for col, label, val, color in zip([m1, m2, m3], ["TOTAL ITEMS", "OUTSTANDING", "COMPLETE"], 
-                                 [len(df_display), len(df_display[df_display['Status'] == 'Outstanding']), len(df_display[df_display['Status'] == 'Complete'])],
-                                 ["#1f4e79", "#ef4444", "#22c55e"]):
-    col.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px; font-weight:bold;">{label}</p>
-                 <p style="font-size:32px; font-weight:800; color:{color};">{val}</p></div>""", unsafe_allow_html=True)
+# --- 5. SUMMARY CARDS (DIPERKECIL) ---
+total = len(df_display)
+outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
+complete = len(df_display[df_display['Status'] == 'Complete'])
 
+st.markdown(f"""
+    <div class="metric-container">
+        <div class="metric-card" style="border-bottom-color: #1f4e79;">
+            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">TOTAL ITEMS</p>
+            <p style="font-size:28px; font-weight:800; color:#1f4e79; margin:0;">{total}</p>
+        </div>
+        <div class="metric-card" style="border-bottom-color: #ef4444;">
+            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p>
+            <p style="font-size:28px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p>
+        </div>
+        <div class="metric-card" style="border-bottom-color: #22c55e;">
+            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p>
+            <p style="font-size:28px; font-weight:800; color:#22c55e; margin:0;">{complete}</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- 6. GRAFIK DENGAN KOTAK PEMBATAS ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
 
-    # Skema warna Glowing
-    colors_glow = ['#00D4FF', '#FF00E4', '#80FF00', '#FFB800', '#00FFA3']
-
-    # 1. PIC PIE CHART (Doughnut with Emboss Effect)
+    # Box 1: PIC
     with g1:
+        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
         fig = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5,
-                                    marker=dict(colors=colors_glow, line=dict(color='#FFFFFF', width=2)))])
-        fig.update_traces(textinfo='label+percent', hoverinfo='label+value', pull=[0.05]*len(pic_counts))
-        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=350, showlegend=False, 
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                                    marker=dict(colors=px.colors.qualitative.Pastel, line=dict(color='#FFFFFF', width=2)))])
+        fig.update_traces(textinfo='label+percent', pull=[0.05]*len(pic_counts))
+        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. STATUS PIE CHART (Glowing Emboss)
+    # Box 2: Status
     with g2:
+        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
         fig = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5,
-                                    marker=dict(colors=['#22c55e', '#ef4444', '#3b82f6'], 
-                                    line=dict(color='#FFFFFF', width=3)))])
+                                    marker=dict(colors=['#22c55e', '#ef4444', '#3b82f6'], line=dict(color='#FFFFFF', width=2)))])
         fig.update_traces(textinfo='label+percent', pull=[0.1, 0, 0])
-        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=350, showlegend=False,
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. UNIT BAR CHART (3D/Embossed Look)
+    # Box 3: Unit
     with g3:
+        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
         fig = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count'],
-                               marker=dict(color='#1f4e79', line=dict(color='#00D4FF', width=2)),
+                               marker=dict(color='#1f4e79', line=dict(color='#00D4FF', width=1)),
                                text=unit_data['count'], textposition='auto'))
-        fig.update_layout(title_text="Top 5 Units", title_x=0.5, height=350,
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                          yaxis_visible=False)
+        fig.update_layout(title_text="Top 5 Units", title_x=0.5, height=300, margin=dict(t=40,b=10,l=10,r=10), yaxis_visible=False)
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 6. DATA EDITOR ---
+# --- 7. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
-    df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=500,
-    key="editor_nhm_glow_v1",
+    df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
+    key="editor_boxed_v1",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
-        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
         "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=130),
         "Update Status": st.column_config.TextColumn("Update Status", width=400)
     }
 )
 
-# --- 7. ACTIONS ---
+# --- 8. ACTIONS ---
 c_save, c_exp, _ = st.columns([1.5, 1.5, 4])
 if c_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
