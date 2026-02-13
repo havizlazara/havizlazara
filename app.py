@@ -3,11 +3,30 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import io
 import os
+import streamlit.components.v1 as components
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- CUSTOM CSS ---
+# --- 1. JAVASCRIPT & CSS UNTUK SCROLL BUTTONS ---
+def add_scroll_buttons():
+    components.html(
+        """
+        <div id="scroll-btns" style="position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 9999;">
+            <button onclick="window.parent.window.scrollTo({top: 0, behavior: 'smooth'})" 
+                style="background-color: #1f4e79; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                ▲
+            </button>
+            <button onclick="window.parent.window.scrollTo({top: window.parent.document.body.scrollHeight, behavior: 'smooth'})" 
+                style="background-color: #1f4e79; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                ▼
+            </button>
+        </div>
+        """,
+        height=0,
+    )
+
+# --- 2. CUSTOM CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -25,7 +44,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. KONEKSI GOOGLE SHEETS ---
+# --- 3. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
@@ -34,27 +53,20 @@ def load_data():
         cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # 1. PERBAIKAN FORMAT ANGKA (Menghilangkan .0)
-    # Kita paksa kolom angka besar menjadi string tanpa desimal
+    # Perbaikan format angka (Material, PO No, Resv)
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
-            # Ubah ke numerik dulu, hilangkan NaN, ubah ke Int, lalu ke String
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
-            # Kembalikan string kosong jika sebelumnya adalah 0 (karena fillna)
             data[col] = data[col].replace('0', '')
     
-    # 2. PERBAIKAN TANGGAL
+    # Perbaikan tanggal
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
     
-    # 3. PERBAIKAN QTY
-    if 'Qty' in data.columns:
-        data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
-    
-    # 4. STANDARISASI KOLOM TEKS LAINNYA
-    other_cols = ['PIC', 'Fleet', 'Unit no', 'Short Text', 'Supplier', 'Status', 'Update Status']
-    for col in other_cols:
+    # Standarisasi teks
+    str_cols = ['PIC', 'Fleet', 'Unit no', 'Short Text', 'Supplier', 'Status', 'Update Status']
+    for col in str_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
             
@@ -66,7 +78,8 @@ except Exception as e:
     st.error(f"Koneksi Database Gagal: {e}")
     st.stop()
 
-# --- 2. HEADER ---
+# --- 4. HEADER & NAVIGASI ---
+add_scroll_buttons() # Menambahkan tombol scroll melayang
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
     if os.path.exists("NHM.jpg"): st.image("NHM.jpg", use_container_width=True)
@@ -79,7 +92,7 @@ with col_text:
         </div>
     """, unsafe_allow_html=True)
 
-# --- 3. FILTER & SEARCH ---
+# --- 5. FILTER ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
@@ -101,7 +114,7 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 4. SUMMARY ---
+# --- 6. SUMMARY ---
 st.markdown(f"""
 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
     <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
@@ -119,7 +132,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE ---
+# --- 7. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
@@ -130,21 +143,18 @@ edited_data = st.data_editor(
     use_container_width=True,
     hide_index=False,
     num_rows="dynamic",
-    key="editor_nhm_clean_v1",
+    key="editor_nhm_scroll_v1",
     column_config={
-        "PIC": st.column_config.TextColumn("PIC", width=100),
-        "Fleet": st.column_config.TextColumn("Fleet", width=120),
-        "Unit no": st.column_config.TextColumn("Unit", width=100),
+        "PIC": st.column_config.TextColumn("PIC", width=120),
         "Material": st.column_config.TextColumn("Material", width=120),
         "PO No": st.column_config.TextColumn("PO No", width=120),
         "Qty": st.column_config.NumberColumn("Qty", width=80, format="%d"),
-        "Doc Date": st.column_config.DateColumn("Date", width=120, format="DD/MM/YYYY"),
-        "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=120),
-        "Update Status": st.column_config.TextColumn("Update Status", width=300)
+        "Doc Date": st.column_config.DateColumn("Date", width=150, format="DD/MM/YYYY"),
+        "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=150),
     }
 )
 
-# --- 6. TOMBOL SIMPAN ---
+# --- 8. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
@@ -158,19 +168,18 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
 
         final_df = final_df.dropna(how='all')
         
-        # Kembalikan kolom tanggal ke format string sebelum dikirim ke Sheets
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
 
         conn.update(data=final_df)
         st.cache_data.clear()
-        st.success("Format Diperbarui & Tersinkronisasi!")
+        st.success("Tersimpan!")
         st.rerun()
     except Exception as e:
-        st.error(f"Gagal Menyimpan: {e}")
+        st.error(f"Gagal: {e}")
 
-# --- 7. EXPORT ---
+# --- 9. EXPORT ---
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Monitoring.xlsx')
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
