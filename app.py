@@ -44,7 +44,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. HEADER SEJAJAR ---
+# --- 1. HEADER ---
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
     if os.path.exists("NHM.jpg"):
@@ -81,18 +81,20 @@ if 'master_data' not in st.session_state:
     df["Doc Date"] = pd.to_datetime(df["Doc Date"]).dt.date
     st.session_state.master_data = df
 
-# --- 3. FILTER & SEARCH (LOGIKA DROPDOWN DINAMIS) ---
+# --- 3. LOGIKA UPDATE OTOMATIS (AGRESIF) ---
+# Mengambil opsi dari master_data dan membersihkan nilai None/NaN
+def get_clean_opts(column_name):
+    # Membersihkan baris yang mengandung None atau kosong agar tidak masuk ke dropdown
+    clean_list = st.session_state.master_data[column_name].replace(["None", None, ""], pd.NA).dropna()
+    return sorted(clean_list.astype(str).unique())
+
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
-    # Fungsi ini mengambil nilai unik terbaru dari master_data
-    def get_dynamic_opts(column_name):
-        return sorted(st.session_state.master_data[column_name].dropna().astype(str).unique())
-    
-    f_fleet = c1.multiselect("Filter Fleet", options=get_dynamic_opts("Fleet"))
-    f_unit = c2.multiselect("Filter Unit", options=get_dynamic_opts("Unit no"))
-    f_status = c3.multiselect("Filter Status", options=get_dynamic_opts("Status"))
+    f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
+    f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
+    f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
 # LOGIKA FILTER
 df_filtered = st.session_state.master_data.copy()
@@ -102,8 +104,7 @@ if f_fleet: df_filtered = df_filtered[df_filtered["Fleet"].isin(f_fleet)]
 if f_unit: df_filtered = df_filtered[df_filtered["Unit no"].isin(f_unit)]
 if f_status: df_filtered = df_filtered[df_filtered["Status"].isin(f_status)]
 
-# --- 4. SUMMARY DATA ---
-st.write("### 📊 Summary Filtered Data")
+# --- 4. SUMMARY ---
 m1, m2, m3 = st.columns(3)
 with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Items</span><span class='metric-value-custom'>{len(df_filtered)}</span></div>", unsafe_allow_html=True)
 with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_filtered[df_filtered['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
@@ -112,12 +113,13 @@ with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label
 # --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
+# Menggunakan key unik agar perubahan terdeteksi sempurna
 edited_df = st.data_editor(
     df_filtered,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="editor_update_v2", 
+    key="editor_nhm_v3", 
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
@@ -127,28 +129,26 @@ edited_df = st.data_editor(
 
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
-# LOGIKA SIMPAN (DIPERBAIKI UNTUK UPDATE DROPDOWN)
+# LOGIKA SIMPAN INSTAN
 if col_save.button("💾 SIMPAN DATA"):
-    # 1. Update data master dengan data baru dari layar editor
-    st.session_state.master_data = edited_df.copy()
+    # Paksa data editor untuk sinkron ke master_data
+    st.session_state.master_data = edited_df.reset_index(drop=True)
     
-    # 2. Memberikan notifikasi sukses
-    st.success("Data berhasil disimpan! Dropdown filter telah diperbarui.")
+    # Menghapus baris yang benar-benar kosong jika ada hasil paste yang berlebih
+    st.session_state.master_data = st.session_state.master_data.dropna(how='all')
     
-    # 3. Memicu rerun untuk menghitung ulang fungsi get_dynamic_opts()
+    st.success("Data Tersimpan! Dropdown otomatis terupdate.")
     st.rerun()
 
-# --- 6. EXPORT EXCEL ---
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='PO_Summary')
-    return output.getvalue()
+# --- 6. EXPORT ---
+excel_data = io.BytesIO()
+with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
+    df_filtered.to_excel(writer, index=False, sheet_name='PO_Summary')
 
 col_export.download_button(
     label="📊 EXPORT EXCEL",
-    data=to_excel(df_filtered),
-    file_name='NHM_Monitoring_PO.xlsx',
+    data=excel_data.getvalue(),
+    file_name='NHM_PO_Dashboard.xlsx',
     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 )
 
