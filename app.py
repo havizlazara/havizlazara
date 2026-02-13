@@ -25,28 +25,20 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. KONEKSI GOOGLE SHEETS (VIA SERVICE ACCOUNT) ---
+# --- 1. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Mengambil data mentah dari Cloud
     data = conn.read(ttl=0)
-    
     if data is None or data.empty:
-        # Kerangka kolom dengan PIC di paling kiri
         cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # --- PEMBERSIHAN TIPE DATA ---
-    # Konversi tanggal agar kompatibel dengan st.data_editor
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
-    
-    # Konversi Qty menjadi angka bulat
     if 'Qty' in data.columns:
         data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
     
-    # Standarisasi kolom teks (PIC, Fleet, dll)
     str_cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'PO No', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
@@ -63,8 +55,7 @@ except Exception as e:
 # --- 2. HEADER ---
 col_logo, col_text = st.columns([1.2, 5])
 with col_logo:
-    if os.path.exists("NHM.jpg"):
-        st.image("NHM.jpg", use_container_width=True)
+    if os.path.exists("NHM.jpg"): st.image("NHM.jpg", use_container_width=True)
 
 with col_text:
     st.markdown("""
@@ -76,12 +67,11 @@ with col_text:
 
 # --- 3. FILTER & SEARCH ---
 with st.container():
-    search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data (PIC, PO, Material, dll)...")
+    search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
     def get_clean_opts(column_name):
         if column_name in df_master.columns:
-            # Mengambil nilai unik dan membuang nilai kosong/NaN
             return sorted([x for x in df_master[column_name].unique() if x and str(x).lower() != "nan" and str(x).strip() != ""])
         return []
     
@@ -89,7 +79,7 @@ with st.container():
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
-# Logika Filter Display
+# Logika Filter
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
@@ -97,7 +87,7 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 4. SUMMARY CARDS ---
+# --- 4. SUMMARY ---
 st.markdown(f"""
 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
     <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
@@ -115,21 +105,25 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE (EDITABLE) ---
+# --- 5. TABEL DATABASE (MODIFIKASI NOMOR & LEBAR) ---
 st.markdown("### 📋 Database Monitoring")
 
-# Key editor diubah untuk mereset tampilan jika ada perubahan struktur
+# Persiapan data untuk editor
+df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
+
+# MENGUBAH NOMOR INDEX DIMULAI DARI 1
+df_to_edit.index = range(1, len(df_to_edit) + 1)
+
 edited_data = st.data_editor(
-    df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
+    df_to_edit,
     use_container_width=True,
-    hide_index=True,
+    hide_index=False, # Menampilkan nomor urut di sebelah kiri
     num_rows="dynamic",
-    key="editor_nhm_final_v1",
+    key="editor_pic_vFinal",
     column_config={
         "PIC": st.column_config.TextColumn(
             "PIC", 
-            width="medium", # Menyesuaikan panjang karakter nama PIC
-            help="Nama penanggung jawab"
+            width="small", # Mengubah dari medium ke small agar tidak terlalu lebar
         ),
         "Fleet": st.column_config.TextColumn("Fleet", width="small"),
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
@@ -140,45 +134,34 @@ edited_data = st.data_editor(
             options=["Complete", "Outstanding", "On Process"], 
             width="medium"
         ),
-        "Update Status": st.column_config.TextColumn("Update Status", width="large")
     }
 )
 
-# --- 6. TOMBOL SIMPAN & SYNC ---
+# --- 6. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Gabungkan data yang difilter kembali ke master agar tidak menghapus data lain
+        # Reset index kembali ke standar sebelum simpan agar tidak bentrok dengan master
+        to_save = edited_data.reset_index(drop=True)
+        
         if f_fleet or f_unit or f_status or search_query:
             df_hidden = df_master[~df_master.index.isin(df_display.index)]
-            final_df = pd.concat([df_hidden, edited_data]).reset_index(drop=True)
+            final_df = pd.concat([df_hidden, to_save]).reset_index(drop=True)
         else:
-            final_df = edited_data
+            final_df = to_save
 
-        # Pembersihan baris kosong sebelum push ke Cloud
         final_df = final_df.dropna(how='all')
-        
-        # Simpan ke Google Sheets via Service Account
         conn.update(data=final_df)
         
-        # Reset Cache agar semua user melihat data terbaru
         st.cache_data.clear()
         st.success("Berhasil Sinkronisasi!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
 
-# --- 7. EXPORT EXCEL ---
+# --- 7. EXPORT ---
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-
-col_export.download_button(
-    label="📊 EXPORT EXCEL",
-    data=excel_data.getvalue(),
-    file_name='NHM_Database_Monitoring.xlsx',
-    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-)
-
-st.markdown("<p style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</p>", unsafe_allow_html=True)
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
