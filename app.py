@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import io
 import os
-import plotly.express as px  # Tambahan untuk grafik
+import plotly.express as px
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
@@ -26,13 +26,16 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI GOOGLE SHEETS ---
+# --- 2. KONEKSI GOOGLE SHEETS DENGAN CACHING ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Menambahkan cache selama 10 menit (600 detik) untuk menghemat kuota API
+@st.cache_data(ttl=600)
 def load_data():
-    data = conn.read(ttl=0)
+    # Mengambil data dari Google Sheets
+    data = conn.read(ttl=0) 
+    
     if data is None or data.empty:
-        # Urutan kolom baru: Fleet, Unit no, PIC
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
@@ -54,6 +57,10 @@ def load_data():
             data[col] = data[col].fillna("").astype(str)
             
     return data
+
+# Fungsi untuk membersihkan cache secara manual saat simpan data
+def refresh_all_data():
+    st.cache_data.clear()
 
 try:
     df_master = load_data()
@@ -88,7 +95,7 @@ with st.container():
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
-# Logika Filter
+# Logika Filter (dilakukan di memori, bukan di API)
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
@@ -96,68 +103,44 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. SUMMARY ---
-st.markdown(f"""
-<div style="display: flex; gap: 10px; margin-bottom: 20px;">
-    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
+# --- 5. SUMMARY & GRAFIK ---
+st.markdown("### 📊 Dashboard Summary")
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.markdown(f"""<div style="border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">TOTAL ITEMS</div>
         <div style="font-size:24px; font-weight:bold; color:#1f4e79;">{len(df_display)}</div>
-    </div>
-    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
+    </div>""", unsafe_allow_html=True)
+with m2:
+    st.markdown(f"""<div style="border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">OUTSTANDING</div>
         <div style="font-size:24px; font-weight:bold; color:#ef4444;">{len(df_display[df_display['Status'] == 'Outstanding'])}</div>
-    </div>
-    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
+    </div>""", unsafe_allow_html=True)
+with m3:
+    st.markdown(f"""<div style="border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center; background:white;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">COMPLETE</div>
         <div style="font-size:24px; font-weight:bold; color:#22c55e;">{len(df_display[df_display['Status'] == 'Complete'])}</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    </div>""", unsafe_allow_html=True)
 
-# --- TAMBAHAN: GRAFIK PIE CHART ---
 if not df_display.empty:
-    st.markdown("### 📊 Status Distribution")
-    # Menghitung distribusi status dari data yang sudah di-filter
     status_counts = df_display['Status'].value_counts().reset_index()
     status_counts.columns = ['Status', 'Count']
-    
-    # Membuat Pie Chart menggunakan Plotly
     fig = px.pie(
-        status_counts, 
-        values='Count', 
-        names='Status',
+        status_counts, values='Count', names='Status', hole=0.4,
         color='Status',
-        color_discrete_map={
-            'Complete': '#22c55e', 
-            'Outstanding': '#ef4444', 
-            'On Process': '#f59e0b'
-        },
-        hole=0.4 # Membuat doughnut chart agar terlihat modern
+        color_discrete_map={'Complete': '#22c55e', 'Outstanding': '#ef4444', 'On Process': '#f59e0b'}
     )
-    
-    fig.update_layout(
-        margin=dict(t=0, b=0, l=0, r=0),
-        height=350,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
-    )
-    
+    fig.update_layout(height=350, margin=dict(t=20, b=0, l=0, r=0), legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center"))
     st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Tidak ada data untuk ditampilkan di grafik.")
 
-# --- 6. TABEL DATABASE (URUTAN: Fleet, Unit no, PIC) ---
+# --- 6. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
-
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
-    df_to_edit,
-    use_container_width=True,
-    hide_index=False,
-    num_rows="dynamic",
-    height=550,
-    key="editor_nhm_reorder_v1",
+    df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=500,
+    key="editor_nhm_final_vCache",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
@@ -171,7 +154,6 @@ edited_data = st.data_editor(
 
 # --- 7. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
-
 if col_save.button("💾 SIMPAN & UPDATE LIST"):
     try:
         to_save = edited_data.reset_index(drop=True)
@@ -180,14 +162,17 @@ if col_save.button("💾 SIMPAN & UPDATE LIST"):
             final_df = pd.concat([df_hidden, to_save]).reset_index(drop=True)
         else:
             final_df = to_save
-
         final_df = final_df.dropna(how='all')
         
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
 
+        # Push data ke Sheets
         conn.update(data=final_df)
-        st.cache_data.clear()
+        
+        # PENTING: Hapus cache setelah simpan agar data terbaru muncul
+        refresh_all_data()
+        
         st.success("Berhasil Sinkronisasi!")
         st.rerun()
     except Exception as e:
