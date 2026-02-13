@@ -29,25 +29,22 @@ st.markdown("""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Mengambil data mentah dari Cloud
     data = conn.read(ttl=0)
     
     if data is None or data.empty:
-        # Kerangka kolom cadangan jika database kosong
-        cols = ['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
+        # Tambahkan PIC di awal daftar kolom
+        cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # --- PEMBERSIHAN TIPE DATA (SOLUSI StreamlitAPIException) ---
-    # 1. Pastikan kolom Doc Date adalah objek tanggal, data tidak valid diubah jadi NaT (kosong)
+    # PEMBERSIHAN TIPE DATA
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
-    # 2. Pastikan kolom Qty adalah angka integer
     if 'Qty' in data.columns:
         data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
     
-    # 3. Pastikan kolom lainnya bertipe string untuk menghindari error format
-    str_cols = ['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'PO No', 'Supplier', 'Status', 'Update Status']
+    # Pastikan semua kolom teks (termasuk PIC) konsisten sebagai string
+    str_cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'PO No', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
@@ -80,8 +77,7 @@ with st.container():
     
     def get_clean_opts(column_name):
         if column_name in df_master.columns:
-            # Hanya tampilkan opsi yang tidak kosong
-            return sorted([x for x in df_master[column_name].unique() if x and x != "nan"])
+            return sorted([x for x in df_master[column_name].unique() if x and x != "nan" and x != ""])
         return []
     
     f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
@@ -114,17 +110,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE ---
+# --- 5. TABEL DATABASE (DENGAN KOLOM PIC) ---
 st.markdown("### 📋 Database Monitoring")
 
-# PENTING: Menggunakan key yang berbeda 'editor_final_v10' untuk mereset state yang error
 edited_data = st.data_editor(
     df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="editor_final_v10",
+    key="editor_pic_v1",
     column_config={
+        "PIC": st.column_config.TextColumn("PIC", width="medium"),
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Qty": st.column_config.NumberColumn(width="small", format="%d"),
         "Doc Date": st.column_config.DateColumn("Date", width="medium", format="DD/MM/YYYY"),
@@ -143,14 +139,13 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
         else:
             final_df = edited_data
 
-        # Pastikan kolom Qty dan Doc Date tetap benar tipenya sebelum dikirim balik ke Google Sheets
-        final_df['Qty'] = pd.to_numeric(final_df['Qty'], errors='coerce').fillna(0).astype(int)
+        final_df = final_df.dropna(how='all')
         
-        # Kirim ke Cloud
-        conn.update(data=final_df.dropna(how='all'))
+        # Simpan ke Google Sheets
+        conn.update(data=final_df)
         
         st.cache_data.clear()
-        st.success("Data Sinkron!")
+        st.success("Data Sinkron dengan Kolom PIC!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
