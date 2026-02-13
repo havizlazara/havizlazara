@@ -31,7 +31,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
+        # Urutan kolom baru: Fleet, Unit no, PIC
+        cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
     # Perbaikan format angka (Menghilangkan .0)
@@ -46,7 +47,7 @@ def load_data():
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
     
     # Standarisasi kolom teks
-    str_cols = ['PIC', 'Fleet', 'Unit no', 'Short Text', 'Supplier', 'Status', 'Update Status']
+    str_cols = ['Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
@@ -66,7 +67,7 @@ with col_logo:
 
 with col_text:
     st.markdown("""
-        <div id="top" style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
+        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
             <h2 class="giant-sub">Supply Chain & Logistic Departemen</h2>
         </div>
@@ -112,7 +113,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. TABEL DATABASE (DENGAN INTERNAL SCROLL & PINNED COLUMN) ---
+# --- 6. TABEL DATABASE (URUTAN: Fleet, Unit no, PIC) ---
 st.markdown("### 📋 Database Monitoring")
 
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
@@ -123,14 +124,12 @@ edited_data = st.data_editor(
     use_container_width=True,
     hide_index=False,
     num_rows="dynamic",
-    height=550, # Mengunci tinggi tabel agar muncul scrollbar internal
-    key="editor_nhm_final_scroll",
+    height=550,
+    key="editor_nhm_reorder_v1",
     column_config={
-        "PIC": st.column_config.TextColumn("PIC", width=120, pinned=True),
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
-        "Unit no": st.column_config.TextColumn("Unit", width=100),
-        "Material": st.column_config.TextColumn("Material", width=120),
-        "PO No": st.column_config.TextColumn("PO No", width=120),
+        "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
+        "PIC": st.column_config.TextColumn("PIC", width=120),
         "Qty": st.column_config.NumberColumn("Qty", width=80, format="%d"),
         "Doc Date": st.column_config.DateColumn("Date", width=150, format="DD/MM/YYYY"),
         "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=150),
@@ -152,7 +151,6 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
 
         final_df = final_df.dropna(how='all')
         
-        # Format tanggal sebelum kirim balik
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
 
