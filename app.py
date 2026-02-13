@@ -3,6 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import io
 import os
+import plotly.express as px  # Tambahan untuk grafik
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
@@ -69,7 +70,7 @@ with col_text:
     st.markdown("""
         <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
-            <h2 class="giant-sub">Supply Chain & Logistics Departement</h2>
+            <h2 class="giant-sub">Supply Chain & Logistics Departemen</h2>
         </div>
     """, unsafe_allow_html=True)
 
@@ -112,6 +113,37 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# --- TAMBAHAN: GRAFIK PIE CHART ---
+if not df_display.empty:
+    st.markdown("### 📊 Status Distribution")
+    # Menghitung distribusi status dari data yang sudah di-filter
+    status_counts = df_display['Status'].value_counts().reset_index()
+    status_counts.columns = ['Status', 'Count']
+    
+    # Membuat Pie Chart menggunakan Plotly
+    fig = px.pie(
+        status_counts, 
+        values='Count', 
+        names='Status',
+        color='Status',
+        color_discrete_map={
+            'Complete': '#22c55e', 
+            'Outstanding': '#ef4444', 
+            'On Process': '#f59e0b'
+        },
+        hole=0.4 # Membuat doughnut chart agar terlihat modern
+    )
+    
+    fig.update_layout(
+        margin=dict(t=0, b=0, l=0, r=0),
+        height=350,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Tidak ada data untuk ditampilkan di grafik.")
 
 # --- 6. TABEL DATABASE (URUTAN: Fleet, Unit no, PIC) ---
 st.markdown("### 📋 Database Monitoring")
