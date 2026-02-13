@@ -29,28 +29,35 @@ st.markdown("""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Membaca data mentah
+    # Mengambil data mentah dari Cloud
     data = conn.read(ttl=0)
     
-    # Jika data kosong, buat kerangka dasar
     if data is None or data.empty:
-        return pd.DataFrame(columns=['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status'])
+        # Kerangka kolom cadangan jika database kosong
+        cols = ['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
+        return pd.DataFrame(columns=cols)
     
-    # PERBAIKAN KRUSIAL: Membersihkan tipe data agar tidak terjadi StreamlitAPIException
+    # --- PEMBERSIHAN TIPE DATA (SOLUSI StreamlitAPIException) ---
+    # 1. Pastikan kolom Doc Date adalah objek tanggal, data tidak valid diubah jadi NaT (kosong)
     if 'Doc Date' in data.columns:
-        # Mengubah teks menjadi format tanggal, data yang salah ketik akan menjadi NaT (kosong)
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
+    # 2. Pastikan kolom Qty adalah angka integer
     if 'Qty' in data.columns:
-        # Memastikan Qty adalah angka
         data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
-        
+    
+    # 3. Pastikan kolom lainnya bertipe string untuk menghindari error format
+    str_cols = ['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'PO No', 'Supplier', 'Status', 'Update Status']
+    for col in str_cols:
+        if col in data.columns:
+            data[col] = data[col].fillna("").astype(str)
+            
     return data
 
 try:
     df_master = load_data()
 except Exception as e:
-    st.error(f"Koneksi Gagal: {e}")
+    st.error(f"Koneksi Database Gagal: {e}")
     st.stop()
 
 # --- 2. HEADER ---
@@ -60,7 +67,7 @@ with col_logo:
 
 with col_text:
     st.markdown("""
-        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 180px;">
+        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
             <h2 class="giant-sub">Supply Chain & Logistic Departemen</h2>
         </div>
@@ -73,7 +80,8 @@ with st.container():
     
     def get_clean_opts(column_name):
         if column_name in df_master.columns:
-            return sorted(df_master[column_name].dropna().astype(str).unique())
+            # Hanya tampilkan opsi yang tidak kosong
+            return sorted([x for x in df_master[column_name].unique() if x and x != "nan"])
         return []
     
     f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
@@ -91,15 +99,15 @@ if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 # --- 4. SUMMARY ---
 st.markdown(f"""
 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">TOTAL ITEMS</div>
         <div style="font-size:24px; font-weight:bold; color:#1f4e79;">{len(df_display)}</div>
     </div>
-    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">OUTSTANDING</div>
         <div style="font-size:24px; font-weight:bold; color:#ef4444;">{len(df_display[df_display['Status'] == 'Outstanding'])}</div>
     </div>
-    <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
+    <div style="flex:1; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
         <div style="color:#64748b; font-size:12px; font-weight:bold;">COMPLETE</div>
         <div style="font-size:24px; font-weight:bold; color:#22c55e;">{len(df_display[df_display['Status'] == 'Complete'])}</div>
     </div>
@@ -109,13 +117,13 @@ st.markdown(f"""
 # --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
-# PENTING: Menggunakan key yang berbeda untuk mematikan state lama yang error
+# PENTING: Menggunakan key yang berbeda 'editor_final_v10' untuk mereset state yang error
 edited_data = st.data_editor(
     df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="editor_safe_v6",
+    key="editor_final_v10",
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Qty": st.column_config.NumberColumn(width="small", format="%d"),
@@ -135,8 +143,11 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
         else:
             final_df = edited_data
 
-        final_df = final_df.dropna(how='all')
-        conn.update(data=final_df)
+        # Pastikan kolom Qty dan Doc Date tetap benar tipenya sebelum dikirim balik ke Google Sheets
+        final_df['Qty'] = pd.to_numeric(final_df['Qty'], errors='coerce').fillna(0).astype(int)
+        
+        # Kirim ke Cloud
+        conn.update(data=final_df.dropna(how='all'))
         
         st.cache_data.clear()
         st.success("Data Sinkron!")
@@ -148,4 +159,4 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_PO.xlsx')
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
