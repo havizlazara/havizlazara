@@ -19,8 +19,8 @@ st.markdown("""
         border-radius: 12px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
-    .giant-title { font-size: 60px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
-    .giant-sub { font-size: 30px; color: #4a5568; margin: 0; font-weight: 600; }
+    .giant-title { font-size: 50px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
+    .giant-sub { font-size: 25px; color: #4a5568; margin: 0; font-weight: 600; }
     .stButton>button { width: 100%; background-color: #1f4e79; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; }
     </style>
     """, unsafe_allow_html=True)
@@ -34,13 +34,27 @@ def load_data():
         cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
+    # 1. PERBAIKAN FORMAT ANGKA (Menghilangkan .0)
+    # Kita paksa kolom angka besar menjadi string tanpa desimal
+    cols_to_fix = ['Material', 'PO No', 'Resv']
+    for col in cols_to_fix:
+        if col in data.columns:
+            # Ubah ke numerik dulu, hilangkan NaN, ubah ke Int, lalu ke String
+            data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
+            # Kembalikan string kosong jika sebelumnya adalah 0 (karena fillna)
+            data[col] = data[col].replace('0', '')
+    
+    # 2. PERBAIKAN TANGGAL
     if 'Doc Date' in data.columns:
-        data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
+        data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
+    
+    # 3. PERBAIKAN QTY
     if 'Qty' in data.columns:
         data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
     
-    str_cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'PO No', 'Supplier', 'Status', 'Update Status']
-    for col in str_cols:
+    # 4. STANDARISASI KOLOM TEKS LAINNYA
+    other_cols = ['PIC', 'Fleet', 'Unit no', 'Short Text', 'Supplier', 'Status', 'Update Status']
+    for col in other_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
             
@@ -105,35 +119,28 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE (MODIFIKASI NOMOR & LEBAR) ---
+# --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
-# Persiapan data untuk editor
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
-
-# MENGUBAH NOMOR INDEX DIMULAI DARI 1
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit,
     use_container_width=True,
-    hide_index=False, # Menampilkan nomor urut di sebelah kiri
+    hide_index=False,
     num_rows="dynamic",
-    key="editor_pic_vFinal",
+    key="editor_nhm_clean_v1",
     column_config={
-        "PIC": st.column_config.TextColumn(
-            "PIC", 
-            width="small", # Mengubah dari medium ke small agar tidak terlalu lebar
-        ),
-        "Fleet": st.column_config.TextColumn("Fleet", width="small"),
-        "Unit no": st.column_config.TextColumn("Unit", width="small"),
-        "Qty": st.column_config.NumberColumn("Qty", width="small", format="%d"),
-        "Doc Date": st.column_config.DateColumn("Date", width="medium", format="DD/MM/YYYY"),
-        "Status": st.column_config.SelectboxColumn(
-            "Status",
-            options=["Complete", "Outstanding", "On Process"], 
-            width="medium"
-        ),
+        "PIC": st.column_config.TextColumn("PIC", width=100),
+        "Fleet": st.column_config.TextColumn("Fleet", width=120),
+        "Unit no": st.column_config.TextColumn("Unit", width=100),
+        "Material": st.column_config.TextColumn("Material", width=120),
+        "PO No": st.column_config.TextColumn("PO No", width=120),
+        "Qty": st.column_config.NumberColumn("Qty", width=80, format="%d"),
+        "Doc Date": st.column_config.DateColumn("Date", width=120, format="DD/MM/YYYY"),
+        "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=120),
+        "Update Status": st.column_config.TextColumn("Update Status", width=300)
     }
 )
 
@@ -142,9 +149,7 @@ col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Reset index kembali ke standar sebelum simpan agar tidak bentrok dengan master
         to_save = edited_data.reset_index(drop=True)
-        
         if f_fleet or f_unit or f_status or search_query:
             df_hidden = df_master[~df_master.index.isin(df_display.index)]
             final_df = pd.concat([df_hidden, to_save]).reset_index(drop=True)
@@ -152,10 +157,14 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
             final_df = to_save
 
         final_df = final_df.dropna(how='all')
-        conn.update(data=final_df)
         
+        # Kembalikan kolom tanggal ke format string sebelum dikirim ke Sheets
+        if 'Doc Date' in final_df.columns:
+             final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
+
+        conn.update(data=final_df)
         st.cache_data.clear()
-        st.success("Berhasil Sinkronisasi!")
+        st.success("Format Diperbarui & Tersinkronisasi!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
@@ -164,4 +173,4 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Monitoring.xlsx')
