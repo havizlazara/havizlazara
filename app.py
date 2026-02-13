@@ -48,16 +48,20 @@ st.markdown("""
 # --- 1. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Gunakan cache_data agar aplikasi tidak lemot, tapi ttl pendek
 @st.cache_data(ttl=5)
 def load_data():
+    # ttl=0 memastikan data mentah diambil langsung dari Sheets tanpa cache internal
     return conn.read(ttl=0)
 
 try:
-    # Membaca data master utuh
     df_master = load_data()
+    # Pastikan data tidak kosong untuk menghindari error fungsi pandas
+    if df_master.empty:
+        st.warning("Database Google Sheets kosong. Silakan isi baris pertama dengan header kolom.")
+        st.stop()
 except Exception as e:
-    st.error("Gagal memuat database. Cek Secrets & Izin Editor Google Sheets.")
+    st.error(f"Gagal memuat database: {e}")
+    st.info("Saran: Periksa link di Secrets dan pastikan akses Google Sheets adalah 'Editor'.")
     st.stop()
 
 # --- 2. HEADER ---
@@ -76,26 +80,24 @@ with col_text:
 
 st.markdown("<hr style='border: 1.5px solid #1f4e79; opacity: 0.15; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# --- 3. FILTER & SEARCH (VERSI ANTI-ERROR) ---
+# --- 3. FILTER & SEARCH (ANTI-KEYERROR) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
     def get_clean_opts(column_name):
-        # Cek apakah kolom benar-benar ada di database
+        # Proteksi: Cek apakah nama kolom ada di Google Sheets
         if column_name in df_master.columns:
             return sorted(df_master[column_name].dropna().astype(str).unique())
         else:
-            # Jika kolom tidak ada, tampilkan pesan peringatan dan return list kosong
-            st.warning(f"Kolom '{column_name}' tidak ditemukan di Google Sheets!")
+            st.error(f"Kolom '{column_name}' tidak ditemukan di Google Sheets Anda!")
             return []
     
-    # Memanggil opsi dengan nama kolom yang sudah disesuaikan di Google Sheets
     f_fleet = c1.multiselect("Filter Fleet", options=get_clean_opts("Fleet"))
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
-    
-# LOGIKA FILTER (Untuk Tampilan Saja)
+
+# Logika Filter untuk Tampilan
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
@@ -105,49 +107,46 @@ if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
 # --- 4. SUMMARY ---
 m1, m2, m3 = st.columns(3)
-with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Filtered</span><span class='metric-value-custom'>{len(df_display)}</span></div>", unsafe_allow_html=True)
+with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Items</span><span class='metric-value-custom'>{len(df_display)}</span></div>", unsafe_allow_html=True)
 with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_display[df_display['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
 with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_display[df_display['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
 
 # --- 5. TABEL DATABASE ---
-st.markdown("### 📋 Database Monitoring")
-# Kita gunakan editor pada df_master agar data yang tidak terfilter tetap terjaga
-edited_master = st.data_editor(
-    df_master if not (f_fleet or f_unit or f_status or search_query) else df_display,
+st.markdown("### 📋 Database Monitoring (Real-time Sync)")
+# Jika sedang difilter, yang diedit adalah df_display. Jika tidak, df_master.
+edited_data = st.data_editor(
+    df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="realtime_vfinal_safe",
+    key="realtime_vfinal_fix",
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
     }
 )
 
-# --- 6. TOMBOL SIMPAN ---
+# --- 6. LOGIKA SIMPAN (SAFE SYNC) ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # LOGIKA PERBAIKAN:
-        # Jika user mengedit saat sedang di-filter, kita gabungkan perubahan ke master
+        # Jika user mengedit saat filter aktif, gabungkan kembali dengan data yang tersembunyi
         if f_fleet or f_unit or f_status or search_query:
-            # Ambil data yang tidak masuk dalam filter display saat ini
-            df_not_in_filter = df_master[~df_master.index.isin(df_display.index)]
-            # Gabungkan kembali data yang tidak di-filter dengan data hasil edit
-            final_to_save = pd.concat([df_not_in_filter, edited_master]).reset_index(drop=True)
+            df_hidden = df_master[~df_master.index.isin(df_display.index)]
+            final_df = pd.concat([df_hidden, edited_data]).reset_index(drop=True)
         else:
-            final_to_save = edited_master
+            final_df = edited_data
 
-        # Hapus baris yang benar-benar kosong (akibat paste berlebih)
-        final_to_save = final_to_save.dropna(how='all')
+        # Bersihkan baris kosong
+        final_df = final_df.dropna(how='all')
         
-        # Kirim ke Cloud
-        conn.update(data=final_to_save)
+        # Kirim ke Google Sheets
+        conn.update(data=final_df)
         
-        # Hapus Cache dan Rerun
+        # Bersihkan Cache dan Rerun
         st.cache_data.clear()
-        st.success("Sinkronisasi Berhasil!")
+        st.success("Data Berhasil Disimpan & Sinkron!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
