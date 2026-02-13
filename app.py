@@ -29,15 +29,20 @@ st.markdown("""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
+    # Membaca data mentah
     data = conn.read(ttl=0)
+    
+    # Jika data kosong, buat kerangka dasar
     if data is None or data.empty:
-        # Jika benar-benar kosong, buat DataFrame dengan header standar
         return pd.DataFrame(columns=['Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status'])
     
-    # PERBAIKAN: Konversi kolom tanggal agar tidak menyebabkan StreamlitAPIException
+    # PERBAIKAN KRUSIAL: Membersihkan tipe data agar tidak terjadi StreamlitAPIException
     if 'Doc Date' in data.columns:
+        # Mengubah teks menjadi format tanggal, data yang salah ketik akan menjadi NaT (kosong)
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
+    
     if 'Qty' in data.columns:
+        # Memastikan Qty adalah angka
         data['Qty'] = pd.to_numeric(data['Qty'], errors='coerce').fillna(0).astype(int)
         
     return data
@@ -84,7 +89,6 @@ if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
 # --- 4. SUMMARY ---
-m1, m2, m3 = st.columns(3)
 st.markdown(f"""
 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
     <div style="flex:1; background:#fff; border:1px solid #ddd; padding:15px; border-radius:10px; text-align:center;">
@@ -102,18 +106,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE (DENGAN PERBAIKAN DATA_EDITOR) ---
+# --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
-# Pastikan kita mengirim data yang konsisten tipenya ke editor
+# PENTING: Menggunakan key yang berbeda untuk mematikan state lama yang error
 edited_data = st.data_editor(
     df_display if (f_fleet or f_unit or f_status or search_query) else df_master,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="editor_fix_v5",
+    key="editor_safe_v6",
     column_config={
-        "Fleet": st.column_config.TextColumn(width="medium"),
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Qty": st.column_config.NumberColumn(width="small", format="%d"),
         "Doc Date": st.column_config.DateColumn("Date", width="medium", format="DD/MM/YYYY"),
@@ -126,19 +129,17 @@ col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Sinkronisasi data yang di-filter kembali ke master
         if f_fleet or f_unit or f_status or search_query:
-            df_not_in_filter = df_master[~df_master.index.isin(df_display.index)]
-            final_df = pd.concat([df_not_in_filter, edited_data]).reset_index(drop=True)
+            df_hidden = df_master[~df_master.index.isin(df_display.index)]
+            final_df = pd.concat([df_hidden, edited_data]).reset_index(drop=True)
         else:
             final_df = edited_data
 
-        # Hapus baris kosong dan kirim ke Cloud
         final_df = final_df.dropna(how='all')
         conn.update(data=final_df)
         
         st.cache_data.clear()
-        st.success("Sinkronisasi Berhasil!")
+        st.success("Data Sinkron!")
         st.rerun()
     except Exception as e:
         st.error(f"Gagal Menyimpan: {e}")
@@ -147,4 +148,4 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Monitoring.xlsx')
+col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_PO.xlsx')
