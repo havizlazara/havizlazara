@@ -62,7 +62,7 @@ with col_text:
 
 st.markdown("<hr style='border: 1.5px solid #1f4e79; opacity: 0.15; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# --- 2. SETUP DATA (SENSITIVE TO STATE) ---
+# --- 2. SETUP DATA ---
 if 'master_data' not in st.session_state:
     data = {
         "Fleet": ["Rebuild", "Truck", "Wheel Loader", "Truck", "Bogger"],
@@ -81,17 +81,18 @@ if 'master_data' not in st.session_state:
     df["Doc Date"] = pd.to_datetime(df["Doc Date"]).dt.date
     st.session_state.master_data = df
 
-# --- 3. FILTER & SEARCH ---
+# --- 3. FILTER & SEARCH (LOGIKA DROPDOWN DINAMIS) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
     
-    def get_opts(column_name):
-        return sorted(st.session_state.master_data[column_name].fillna("(blank)").astype(str).unique())
+    # Fungsi ini mengambil nilai unik terbaru dari master_data
+    def get_dynamic_opts(column_name):
+        return sorted(st.session_state.master_data[column_name].dropna().astype(str).unique())
     
-    f_fleet = c1.multiselect("Filter Fleet", options=get_opts("Fleet"))
-    f_unit = c2.multiselect("Filter Unit", options=get_opts("Unit no"))
-    f_status = c3.multiselect("Filter Status", options=get_opts("Status"))
+    f_fleet = c1.multiselect("Filter Fleet", options=get_dynamic_opts("Fleet"))
+    f_unit = c2.multiselect("Filter Unit", options=get_dynamic_opts("Unit no"))
+    f_status = c3.multiselect("Filter Status", options=get_dynamic_opts("Status"))
 
 # LOGIKA FILTER
 df_filtered = st.session_state.master_data.copy()
@@ -108,17 +109,15 @@ with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label
 with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_filtered[df_filtered['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
 with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_filtered[df_filtered['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
 
-# --- 5. TABEL DATABASE (SOLUSI COPY-PASTE) ---
+# --- 5. TABEL DATABASE ---
 st.markdown("### 📋 Database Monitoring")
 
-# PENTING: Menggunakan 'edited_df' secara langsung dari data_editor
-# Menambahkan parameter 'key' dan 'num_rows="dynamic"' untuk mendukung penambahan baris
 edited_df = st.data_editor(
     df_filtered,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="editor_po_final", 
+    key="editor_update_v2", 
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
@@ -128,12 +127,15 @@ edited_df = st.data_editor(
 
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
-# LOGIKA SIMPAN YANG DIPERBAIKI
+# LOGIKA SIMPAN (DIPERBAIKI UNTUK UPDATE DROPDOWN)
 if col_save.button("💾 SIMPAN DATA"):
-    # REVISI: Mengganti Master Data dengan data terbaru yang ada di layar
-    # Ini memastikan baris baru hasil copy-paste ikut tersimpan
+    # 1. Update data master dengan data baru dari layar editor
     st.session_state.master_data = edited_df.copy()
-    st.success("Data berhasil diperbarui dan disimpan!")
+    
+    # 2. Memberikan notifikasi sukses
+    st.success("Data berhasil disimpan! Dropdown filter telah diperbarui.")
+    
+    # 3. Memicu rerun untuk menghitung ulang fungsi get_dynamic_opts()
     st.rerun()
 
 # --- 6. EXPORT EXCEL ---
