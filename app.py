@@ -10,7 +10,7 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CUSTOM CSS (MODERN & BORDERED DESIGN) ---
+# --- 1. CUSTOM CSS (WIDE METRICS & BOXED CHARTS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -39,21 +39,16 @@ st.markdown("""
         mix-blend-mode: multiply;
     }
 
-    /* Box Metrik yang Diperkecil (Width: Fit Content) */
-    .metric-container {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 25px;
-    }
+    /* Box Metrik: Memenuhi Lebar Layar, Tinggi Menyesuaikan Angka */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
-        padding: 10px 25px;
+        padding: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         border: 1px solid #e2e8f0;
         text-align: center;
-        min-width: 180px; /* Ukuran diperkecil */
-        border-bottom: 4px solid #1f4e79;
+        border-bottom: 5px solid #1f4e79;
+        height: auto; /* Tinggi menyesuaikan isi */
     }
 
     /* Box Pembatas Grafik */
@@ -62,6 +57,7 @@ st.markdown("""
         border: 2px solid #e2e8f0;
         border-radius: 15px;
         padding: 15px;
+        margin-bottom: 20px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.02);
     }
 
@@ -144,33 +140,30 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. SUMMARY CARDS (DIPERKECIL) ---
+# --- 5. SUMMARY CARDS (FULL WIDTH) ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
 
-st.markdown(f"""
-    <div class="metric-container">
-        <div class="metric-card" style="border-bottom-color: #1f4e79;">
+m1, m2, m3 = st.columns(3)
+m1.markdown(f"""<div class="metric-card" style="border-bottom-color: #1f4e79;">
             <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">TOTAL ITEMS</p>
-            <p style="font-size:28px; font-weight:800; color:#1f4e79; margin:0;">{total}</p>
-        </div>
-        <div class="metric-card" style="border-bottom-color: #ef4444;">
+            <p style="font-size:32px; font-weight:800; color:#1f4e79; margin:0;">{total}</p>
+        </div>""", unsafe_allow_html=True)
+m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;">
             <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p>
-            <p style="font-size:28px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p>
-        </div>
-        <div class="metric-card" style="border-bottom-color: #22c55e;">
+            <p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p>
+        </div>""", unsafe_allow_html=True)
+m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;">
             <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p>
-            <p style="font-size:28px; font-weight:800; color:#22c55e; margin:0;">{complete}</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+            <p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p>
+        </div>""", unsafe_allow_html=True)
 
 # --- 6. GRAFIK DENGAN KOTAK PEMBATAS ---
 if not df_display.empty:
+    st.write("") # Spacer
     g1, g2, g3 = st.columns(3)
 
-    # Box 1: PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -181,7 +174,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Box 2: Status
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -192,7 +184,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Box 3: Unit
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -210,7 +201,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_boxed_v1",
+    key="editor_boxed_final",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
