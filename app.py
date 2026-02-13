@@ -7,7 +7,7 @@ import os
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CSS CUSTOM (TERMASUK TOMBOL SCROLL STABIL) ---
+# --- 1. CUSTOM CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #f1f5f9; }
@@ -21,34 +21,8 @@ st.markdown("""
     }
     .giant-title { font-size: 50px; font-weight: 900; color: #1f4e79; margin: 0; line-height: 1.1; letter-spacing: -2px; }
     .giant-sub { font-size: 25px; color: #4a5568; margin: 0; font-weight: 600; }
-    
-    /* Tombol Scroll Melayang */
-    .scroll-btn {
-        position: fixed;
-        right: 30px;
-        width: 50px;
-        height: 50px;
-        background-color: #1f4e79;
-        color: white !important;
-        border-radius: 50%;
-        text-align: center;
-        line-height: 50px;
-        font-size: 20px;
-        cursor: pointer;
-        z-index: 99999;
-        text-decoration: none;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        border: none;
-    }
-    .scroll-top { bottom: 90px; }
-    .scroll-bottom { bottom: 30px; }
-    .scroll-btn:hover { background-color: #2c6ca5; transform: scale(1.1); }
-    
     .stButton>button { width: 100%; background-color: #1f4e79; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; }
     </style>
-    
-    <a href="#dashboard-monitoring-purchase-order-nhm" class="scroll-btn scroll-top">▲</a>
-    <a href="#pt-nusa-halmahera-minerals-scm-division-2026" class="scroll-btn scroll-bottom">▼</a>
     """, unsafe_allow_html=True)
 
 # --- 2. KONEKSI GOOGLE SHEETS ---
@@ -60,18 +34,18 @@ def load_data():
         cols = ['PIC', 'Fleet', 'Unit no', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # Perbaikan format angka (Material, PO No, Resv) - Menghilangkan .0
+    # Perbaikan format angka (Menghilangkan .0)
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
-    # Perbaikan tanggal
+    # Perbaikan format tanggal
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
     
-    # Standarisasi teks
+    # Standarisasi kolom teks
     str_cols = ['PIC', 'Fleet', 'Unit no', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
@@ -92,13 +66,13 @@ with col_logo:
 
 with col_text:
     st.markdown("""
-        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
+        <div id="top" style="display: flex; flex-direction: column; justify-content: center; height: 100%; min-height: 150px;">
             <h1 class="giant-title">Dashboard Monitoring Purchase Order NHM</h1>
             <h2 class="giant-sub">Supply Chain & Logistic Departemen</h2>
         </div>
     """, unsafe_allow_html=True)
 
-# --- 4. FILTER ---
+# --- 4. FILTER & SEARCH ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c1, c2, c3 = st.columns(3)
@@ -138,7 +112,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. TABEL DATABASE ---
+# --- 6. TABEL DATABASE (DENGAN INTERNAL SCROLL & PINNED COLUMN) ---
 st.markdown("### 📋 Database Monitoring")
 
 df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
@@ -149,14 +123,18 @@ edited_data = st.data_editor(
     use_container_width=True,
     hide_index=False,
     num_rows="dynamic",
-    key="editor_nhm_scroll_final",
+    height=550, # Mengunci tinggi tabel agar muncul scrollbar internal
+    key="editor_nhm_final_scroll",
     column_config={
-        "PIC": st.column_config.TextColumn("PIC", width=120),
+        "PIC": st.column_config.TextColumn("PIC", width=120, pinned=True),
+        "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
+        "Unit no": st.column_config.TextColumn("Unit", width=100),
         "Material": st.column_config.TextColumn("Material", width=120),
         "PO No": st.column_config.TextColumn("PO No", width=120),
         "Qty": st.column_config.NumberColumn("Qty", width=80, format="%d"),
         "Doc Date": st.column_config.DateColumn("Date", width=150, format="DD/MM/YYYY"),
         "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=150),
+        "Update Status": st.column_config.TextColumn("Update Status", width=400)
     }
 )
 
@@ -171,15 +149,19 @@ if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
             final_df = pd.concat([df_hidden, to_save]).reset_index(drop=True)
         else:
             final_df = to_save
+
         final_df = final_df.dropna(how='all')
+        
+        # Format tanggal sebelum kirim balik
         if 'Doc Date' in final_df.columns:
              final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
+
         conn.update(data=final_df)
         st.cache_data.clear()
-        st.success("Berhasil Tersimpan!")
+        st.success("Berhasil Sinkronisasi!")
         st.rerun()
     except Exception as e:
-        st.error(f"Gagal: {e}")
+        st.error(f"Gagal Menyimpan: {e}")
 
 # --- 8. EXPORT ---
 excel_data = io.BytesIO()
