@@ -48,14 +48,16 @@ st.markdown("""
 # --- 1. KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Gunakan cache_data agar aplikasi tidak lemot, tapi ttl pendek
+@st.cache_data(ttl=5)
 def load_data():
-    # Mengambil data terbaru tanpa cache (ttl=0)
     return conn.read(ttl=0)
 
 try:
+    # Membaca data master utuh
     df_master = load_data()
 except Exception as e:
-    st.error("Gagal memuat database. Pastikan Secrets sudah disetel dan Header Google Sheets sudah benar.")
+    st.error("Gagal memuat database. Cek Secrets & Izin Editor Google Sheets.")
     st.stop()
 
 # --- 2. HEADER ---
@@ -86,53 +88,64 @@ with st.container():
     f_unit = c2.multiselect("Filter Unit", options=get_clean_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_clean_opts("Status"))
 
-# Logika Filter
-df_filtered = df_master.copy()
+# LOGIKA FILTER (Untuk Tampilan Saja)
+df_display = df_master.copy()
 if search_query:
-    df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
-if f_fleet: df_filtered = df_filtered[df_filtered["Fleet"].isin(f_fleet)]
-if f_unit: df_filtered = df_filtered[df_filtered["Unit no"].isin(f_unit)]
-if f_status: df_filtered = df_filtered[df_filtered["Status"].isin(f_status)]
+    df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
+if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
+if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
+if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
 # --- 4. SUMMARY ---
 m1, m2, m3 = st.columns(3)
-with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Items</span><span class='metric-value-custom'>{len(df_filtered)}</span></div>", unsafe_allow_html=True)
-with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_filtered[df_filtered['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
-with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_filtered[df_filtered['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
+with m1: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Total Filtered</span><span class='metric-value-custom'>{len(df_display)}</span></div>", unsafe_allow_html=True)
+with m2: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Outstanding</span><span class='metric-value-custom' style='color: #ef4444;'>{len(df_display[df_display['Status'] == 'Outstanding'])}</span></div>", unsafe_allow_html=True)
+with m3: st.markdown(f"<div class='metric-card-custom'><span class='metric-label-custom'>Complete</span><span class='metric-value-custom' style='color: #22c55e;'>{len(df_display[df_display['Status'] == 'Complete'])}</span></div>", unsafe_allow_html=True)
 
 # --- 5. TABEL DATABASE ---
-st.markdown("### 📋 Database Monitoring (Real-time Sync)")
-edited_df = st.data_editor(
-    df_filtered,
+st.markdown("### 📋 Database Monitoring")
+# Kita gunakan editor pada df_master agar data yang tidak terfilter tetap terjaga
+edited_master = st.data_editor(
+    df_master if not (f_fleet or f_unit or f_status or search_query) else df_display,
     use_container_width=True,
     hide_index=True,
     num_rows="dynamic",
-    key="realtime_vfinal",
+    key="realtime_vfinal_safe",
     column_config={
         "Unit no": st.column_config.TextColumn("Unit", width="small"),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
     }
 )
 
-# --- 6. TOMBOL SIMPAN KE CLOUD ---
+# --- 6. TOMBOL SIMPAN ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC KE SEMUA USER"):
     try:
-        # Menghapus baris kosong
-        final_df = edited_df.dropna(how='all')
+        # LOGIKA PERBAIKAN:
+        # Jika user mengedit saat sedang di-filter, kita gabungkan perubahan ke master
+        if f_fleet or f_unit or f_status or search_query:
+            # Ambil data yang tidak masuk dalam filter display saat ini
+            df_not_in_filter = df_master[~df_master.index.isin(df_display.index)]
+            # Gabungkan kembali data yang tidak di-filter dengan data hasil edit
+            final_to_save = pd.concat([df_not_in_filter, edited_master]).reset_index(drop=True)
+        else:
+            final_to_save = edited_master
+
+        # Hapus baris yang benar-benar kosong (akibat paste berlebih)
+        final_to_save = final_to_save.dropna(how='all')
         
-        # Kirim perubahan ke Google Sheets
-        conn.update(data=final_df)
+        # Kirim ke Cloud
+        conn.update(data=final_to_save)
         
-        # PENTING: Bersihkan cache agar refresh mengambil data terbaru
+        # Hapus Cache dan Rerun
         st.cache_data.clear()
-        
-        st.success("Data Berhasil Tersinkronisasi!")
+        st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e:
-        st.error(f"Gagal Menyimpan: {e}. Cek apakah akses Sheets sudah 'Editor'.")
+        st.error(f"Gagal Menyimpan: {e}")
 
+# --- 7. EXPORT ---
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -141,7 +154,7 @@ def to_excel(df):
 
 col_export.download_button(
     label="📊 EXPORT EXCEL",
-    data=to_excel(df_filtered),
+    data=to_excel(df_display),
     file_name='NHM_Monitoring_PO.xlsx',
     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 )
