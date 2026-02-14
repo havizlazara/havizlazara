@@ -161,43 +161,59 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK ---
+# --- 6. GRAFIK (GLOSSY REVISION) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
+    # 1. PIE CHART PIC (Warna-warni Glossy)
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
-        fig = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5,
-                                    marker=dict(colors=px.colors.sequential.Reds, line=dict(color='#FFFFFF', width=2)))])
+        fig = go.Figure(data=[go.Pie(
+            labels=pic_counts.index, 
+            values=pic_counts.values, 
+            hole=.5,
+            marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2))
+        )])
         fig.update_traces(textinfo='label+percent', pull=[0.05]*len(pic_counts))
         fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 2. PIE CHART STATUS (Hijau & Pink Glossy)
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
-        fig = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5,
-                                    marker=dict(colors=['#22c55e', '#C11B17', '#3b82f6'], line=dict(color='#FFFFFF', width=2)))])
-        fig.update_traces(textinfo='label+percent', pull=[0.1, 0, 0])
+        # Mendefinisikan warna spesifik: Hijau Glossy untuk Complete, Pink untuk Outstanding
+        color_map = {'Complete': '#2ecc71', 'Outstanding': '#ff69b4', 'On Process': '#3b82f6'}
+        colors = [color_map.get(s, '#94a3b8') for s in st_counts.index]
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=st_counts.index, 
+            values=st_counts.values, 
+            hole=.5,
+            marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2))
+        )])
+        fig.update_traces(textinfo='label+percent', pull=[0.1 if s == 'Outstanding' else 0 for s in st_counts.index])
         fig.update_layout(title_text="Status Distribution", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # PERBAIKAN GRAFIK BAR (solicity -> solidity)
+    # 3. BAR CHART UNITS (Biru Glossy Berbeda-beda)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
+        
+        # Menggunakan palet biru yang berbeda untuk setiap batang
+        blue_glossy_palette = ['#1E90FF', '#00BFFF', '#0000FF', '#4169E1', '#4682B4']
         
         fig = go.Figure(go.Bar(
             x=unit_data['Unit no'], 
             y=unit_data['count'],
             marker=dict(
-                color='#1E90FF', 
-                line=dict(color='#00FFFF', width=2), 
-                pattern=dict(shape="/", solidity=0.1) # Diperbaiki dari 'solicity' menjadi 'solidity'
+                color=blue_glossy_palette[:len(unit_data)], 
+                line=dict(color='#FFFFFF', width=2)
             ),
             text=unit_data['count'], 
             textposition='auto',
@@ -223,7 +239,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_Fixed",
+    key="editor_stranger_vFinal_Glossy",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
