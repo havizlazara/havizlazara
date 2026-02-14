@@ -25,6 +25,7 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
     
+    /* Judul Gaya Stranger Things */
     .giant-title { 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
@@ -57,6 +58,7 @@ st.markdown("""
     
     .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
 
+    /* Box Metrik */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
@@ -68,6 +70,7 @@ st.markdown("""
         height: auto;
     }
 
+    /* Box Pembatas Grafik */
     .chart-box {
         background-color: #ffffff;
         border: 2px solid #e2e8f0;
@@ -84,14 +87,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA ---
+# --- 2. KONEKSI DATA DENGAN OPTIMASI CACHE ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=600)
+# TTL dikurangi ke 60 detik agar lebih cepat update dari Google Sheets
+@st.cache_data(ttl=60)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        # Menambahkan 'Dept.' di urutan pertama kolom
+        # Menambahkan 'Dept.' di urutan pertama
         cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
@@ -101,10 +105,10 @@ def load_data():
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
+    # Doc Date Hanya Tanggal (Tanpa Jam)
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
-    # Standarisasi kolom teks termasuk 'Dept.'
     str_cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
@@ -164,11 +168,12 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK ---
+# --- 6. GRAFIK (WHITE BOLD FONT INSIDE) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
+    # 1. PIE PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -188,6 +193,7 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 2. PIE STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -210,6 +216,7 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 3. BAR UNIT (White Bold Inside)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -235,9 +242,7 @@ if not df_display.empty:
             bargap=0.3,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(
-                tickfont=dict(family="Arial Black", size=12, color="#1f4e79")
-            )
+            xaxis=dict(tickfont=dict(family="Arial Black", size=12, color="#1f4e79"))
         )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -249,9 +254,9 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_DeptAdded",
+    key="editor_stranger_vFinal_FullRevision",
     column_config={
-        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True), # Kolom Dept di sisi kiri
+        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True), # Kolom Baru
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
@@ -268,7 +273,7 @@ if c_save.button("💾 SIMPAN & SYNC CLOUD"):
         if 'Doc Date' in final_df.columns:
             final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
         conn.update(data=final_df)
-        st.cache_data.clear()
+        st.cache_data.clear() # Paksa ambil data segar setelah simpan
         st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e: st.error(f"Gagal: {e}")
