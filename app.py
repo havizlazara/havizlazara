@@ -162,12 +162,12 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK ---
+# --- 6. GRAFIK (LABELS INSIDE & WHITE FONT) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE CHART PIC (Memaksa semua nama muncul)
+    # 1. PIE CHART PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -177,12 +177,12 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2))
         )])
-        # textposition='outside' memastikan nama muncul meskipun potongan pie kecil
+        # Memastikan label ada di DALAM dan berwarna PUTIH
         fig.update_traces(
             textinfo='label+percent', 
-            textposition='outside',
-            textfont=dict(color='black', size=11, family="Arial Black"),
-            pull=[0.03]*len(pic_counts)
+            textposition='inside',
+            insidetextorientation='horizontal',
+            textfont=dict(color='white', size=12, family="Arial Black")
         )
         fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=350, showlegend=False, margin=dict(t=50,b=20,l=20,r=20))
         st.plotly_chart(fig, use_container_width=True)
@@ -201,17 +201,18 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2))
         )])
+        # Memastikan label ada di DALAM dan berwarna PUTIH
         fig.update_traces(
             textinfo='label+percent', 
-            textposition='outside',
-            textfont=dict(color='black', size=11, family="Arial Black"),
-            pull=[0.1 if s == 'Outstanding' else 0 for s in st_counts.index]
+            textposition='inside',
+            insidetextorientation='horizontal',
+            textfont=dict(color='white', size=12, family="Arial Black")
         )
         fig.update_layout(title_text="Status Distribution", title_x=0.5, height=350, showlegend=False, margin=dict(t=50,b=20,l=20,r=20))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR CHART UNIT (Font Putih dengan Stroke Hitam)
+    # 3. BAR CHART UNIT
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -224,7 +225,8 @@ if not df_display.empty:
                 line=dict(color='#FFFFFF', width=2)
             ),
             text=unit_data['count'], 
-            textposition='outside', # Angka muncul di luar/atas batang
+            textposition='inside', # Angka muncul di DALAM batang
+            textfont=dict(color='white', family="Arial Black", size=14) # Font PUTIH tebal
         ))
         
         fig.update_layout(
@@ -236,24 +238,10 @@ if not df_display.empty:
             bargap=0.3,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            # Styling font sumbu X (Nama Unit)
             xaxis=dict(
-                tickfont=dict(
-                    family="Arial Black", 
-                    size=12, 
-                    color="white" # Font putih
-                )
+                tickfont=dict(family="Arial Black", size=12, color="#1f4e79")
             )
         )
-        
-        # Efek Stroke Hitam menggunakan CSS-like style di Plotly
-        fig.update_traces(
-            textfont=dict(family="Arial Black", size=14, color="white"), # Angka warna putih
-            marker_line_color="black", # Border batang hitam
-            marker_line_width=1.5
-        )
-        
-        # Injeksi CSS via layout untuk simulasi stroke pada teks sumbu X
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -264,7 +252,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_Styling_Fixed",
+    key="editor_stranger_vFinal_WhiteFont",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
@@ -290,6 +278,6 @@ if c_save.button("💾 SIMPAN & SYNC CLOUD"):
 excel_data = io.BytesIO()
 with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
-col_export.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
+c_exp.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
 
 st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</div>", unsafe_allow_html=True)
