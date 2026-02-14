@@ -198,7 +198,7 @@ if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 7. SUMMARY CARDS & MOVED TITLES ---
+# --- 7. SUMMARY CARDS & TITLES (BOX KOSONG DIHAPUS) ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
@@ -255,7 +255,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_moved_titles_final",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_no_empty_boxes",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
