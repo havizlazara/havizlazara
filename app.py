@@ -149,7 +149,7 @@ if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
-if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
+if f_status: df_display = df_display[df_status.isin(f_status)]
 
 # --- 5. SUMMARY CARDS ---
 total = len(df_display)
@@ -161,7 +161,7 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (PERBAIKAN WARNA) ---
+# --- 6. GRAFIK (BAR BIRU GLOSSY & 3D STYLE) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -169,7 +169,6 @@ if not df_display.empty:
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
-        # PERBAIKAN: Gunakan sequential.Reds bukan qualitative.Reds
         fig = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5,
                                     marker=dict(colors=px.colors.sequential.Reds, line=dict(color='#FFFFFF', width=2)))])
         fig.update_traces(textinfo='label+percent', pull=[0.05]*len(pic_counts))
@@ -187,13 +186,35 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # REVISI GRAFIK BAR: BIRU GLOSSY & EFEK 3D
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        fig = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count'],
-                               marker=dict(color='#C11B17', line=dict(color='#000000', width=1)),
-                               text=unit_data['count'], textposition='auto'))
-        fig.update_layout(title_text="Top 5 Units", title_x=0.5, height=300, margin=dict(t=40,b=10,l=10,r=10), yaxis_visible=False)
+        
+        # Menggunakan warna biru gradien/glossy dengan garis tepi cyan elektrik
+        fig = go.Figure(go.Bar(
+            x=unit_data['Unit no'], 
+            y=unit_data['count'],
+            marker=dict(
+                color='#1E90FF', # Dodger Blue
+                line=dict(color='#00FFFF', width=2), # Cyan edge untuk efek glow/glossy
+                pattern=dict(shape="/", solicity=0.1) # Simulasi bayangan/tekstur 3D
+            ),
+            text=unit_data['count'], 
+            textposition='auto',
+        ))
+        
+        # Menambahkan bayangan untuk efek 3D simulasi
+        fig.update_layout(
+            title_text="Top 5 Units", 
+            title_x=0.5, 
+            height=300, 
+            margin=dict(t=40,b=10,l=10,r=10), 
+            yaxis_visible=False,
+            bargap=0.3, # Memberikan jarak antar batang agar terlihat lebih menonjol
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -204,7 +225,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFixed",
+    key="editor_stranger_vBlueGlossy",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
