@@ -13,15 +13,27 @@ st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 # --- 1. SIDEBAR CUSTOMIZER ---
 with st.sidebar:
     st.header("🎨 Theme Customizer")
-    bg_color = st.color_picker("Pilih Warna Background", "#f1f5f9")
+    bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Warna ini akan diterapkan secara real-time ke seluruh dashboard.")
+    st.info("Panel ini mengatur warna di luar area header ber-background gambar.")
 
-# --- 2. CUSTOM CSS ---
+# --- 2. FUNGSI ENKODE GAMBAR KE BASE64 ---
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return ""
+
+header_bg_base64 = get_base64_image("BG2.jpg")
+logo_base64 = get_base64_image("NHM.jpg")
+
+# --- 3. CUSTOM CSS (DYNAMIC THEME & HEADER BACKGROUND) ---
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: {bg_color}; }}
+    .stApp {{ 
+        background-color: {bg_color}; 
+    }}
     .main .block-container {{
         background-color: {card_color}; 
         padding: 2rem 3rem; 
@@ -30,29 +42,99 @@ st.markdown(f"""
         border-radius: 12px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }}
+    
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
+
+    /* HEADER KHUSUS DENGAN BACKGROUND GAMBAR */
+    .custom-header {{
+        position: relative;
+        width: 100%;
+        padding: 40px 20px;
+        border-radius: 15px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        margin-bottom: 30px;
+        background: #000; /* Dasar hitam jika gambar gagal muat */
+    }}
+
+    /* Layer Background dengan Opacity 50% */
+    .custom-header::before {{
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-image: url("data:image/jpg;base64,{header_bg_base64}");
+        background-size: cover;
+        background-position: center;
+        opacity: 0.5; /* Opacity 50% */
+        z-index: 1;
+    }}
+
+    /* Layer Konten di atas Background */
+    .header-content {{
+        position: relative;
+        z-index: 2;
+    }}
+
     .giant-title {{ 
-        font-family: 'Libre Baskerville', serif; font-size: 55px; font-weight: 900; color: #C11B17; 
-        text-transform: uppercase; text-shadow: 3px 3px 5px rgba(0,0,0,0.3); text-align: center;
+        font-family: 'Libre Baskerville', serif;
+        font-size: 55px; 
+        font-weight: 900; 
+        color: #C11B17; 
+        margin: 0; 
+        line-height: 1.1; 
+        letter-spacing: -1px;
+        text-transform: uppercase;
+        text-shadow: 2px 2px 8px rgba(255,255,255,0.8); /* Glow putih agar teks merah terbaca jelas */
     }}
+    
     .giant-sub {{ 
-        font-family: 'Bebas Neue', cursive; font-size: 28px; color: #1f4e79; 
-        font-weight: 400; letter-spacing: 4px; text-align: center;
+        font-family: 'Bebas Neue', cursive; 
+        font-size: 28px; 
+        color: #1f4e79; 
+        margin: 5px 0 0 0; 
+        font-weight: 400; 
+        letter-spacing: 4px;
+        background: rgba(255,255,255,0.6); /* Background tipis untuk sub-judul */
+        padding: 2px 10px;
+        border-radius: 5px;
     }}
-    .logo-img {{ height: 120px; width: auto; mix-blend-mode: multiply; display: block; margin: 0 auto 15px auto; }}
+    
+    .logo-img-header {{ 
+        height: 110px; 
+        width: auto; 
+        margin-bottom: 15px;
+        filter: drop-shadow(0px 0px 10px white);
+    }}
+
     .metric-card {{
-        background: {card_color}; border-radius: 10px; padding: 15px; border: 1px solid #e2e8f0;
-        text-align: center; border-bottom: 5px solid #C11B17;
+        background: {card_color};
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border: 1px solid #e2e8f0;
+        text-align: center;
+        border-bottom: 5px solid #C11B17;
     }}
+
     .chart-box {{
-        background-color: {card_color}; border: 2px solid #e2e8f0; border-radius: 15px;
-        padding: 20px; margin-bottom: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        background-color: {card_color};
+        border: 2px solid #e2e8f0;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }}
-    .stButton>button {{ width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; }}
+
+    .stButton>button {{ 
+        width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; border: none;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. KONEKSI DATA ---
+# --- 4. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=60)
@@ -61,74 +143,65 @@ def load_data():
     if data is None or data.empty:
         cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
+    
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str).replace('0', '')
+    
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
+    
     str_cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
     return data
 
-df_master = load_data()
+try:
+    df_master = load_data()
+except Exception as e:
+    st.error(f"Koneksi Gagal: {e}")
+    st.stop()
 
-# --- 4. HEADER ---
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
-    return ""
-logo_base64 = get_base64_image("NHM.jpg")
-
+# --- 5. RENDER HEADER (WITH BACKGROUND IMAGE) ---
 st.markdown(f"""
-    <div style="text-align: center;">
-        <img src="data:image/jpeg;base64,{logo_base64}" class="logo-img">
-        <h1 class="giant-title">Purchase Order Monitoring</h1>
-        <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
+    <div class="custom-header">
+        <div class="header-content">
+            <img src="data:image/jpeg;base64,{logo_base64}" class="logo-img-header">
+            <h1 class="giant-title">Purchase Order Monitoring</h1>
+            <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
+        </div>
     </div>
     <div style="border-bottom: 3px solid #C11B17; margin-bottom: 25px;"></div>
     """, unsafe_allow_html=True)
 
-# --- 5. LOGIKA CASCADING FILTER ---
+# --- 6. FILTER (CASCADING LOGIC) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c0, c1, c2, c3 = st.columns(4)
-
-    # Inisialisasi filter dengan data master
+    
     filtered_for_opts = df_master.copy()
-
-    # Fungsi helper untuk mendapatkan opsi unik dari dataframe yang sedang aktif
     def get_dynamic_opts(df, col):
         return sorted([x for x in df[col].unique() if x and str(x) != "nan"])
 
-    # 1. Filter Dept (Pilihan selalu dari data master agar bisa reset)
     f_dept = c0.multiselect("Filter Dept.", options=get_dynamic_opts(df_master, "Dept."))
-    if f_dept:
-        filtered_for_opts = filtered_for_opts[filtered_for_opts["Dept."].isin(f_dept)]
+    if f_dept: filtered_for_opts = filtered_for_opts[filtered_for_opts["Dept."].isin(f_dept)]
 
-    # 2. Filter Fleet (Pilihan menyesuaikan Dept)
     f_fleet = c1.multiselect("Filter Fleet", options=get_dynamic_opts(filtered_for_opts, "Fleet"))
-    if f_fleet:
-        filtered_for_opts = filtered_for_opts[filtered_for_opts["Fleet"].isin(f_fleet)]
+    if f_fleet: filtered_for_opts = filtered_for_opts[filtered_for_opts["Fleet"].isin(f_fleet)]
 
-    # 3. Filter Unit (Pilihan menyesuaikan Dept + Fleet)
     f_unit = c2.multiselect("Filter Unit", options=get_dynamic_opts(filtered_for_opts, "Unit no"))
-    if f_unit:
-        filtered_for_opts = filtered_for_opts[filtered_for_opts["Unit no"].isin(f_unit)]
+    if f_unit: filtered_for_opts = filtered_for_opts[filtered_for_opts["Unit no"].isin(f_unit)]
 
-    # 4. Filter Status (Pilihan menyesuaikan Dept + Fleet + Unit)
     f_status = c3.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
 
-# Data Akhir untuk Display
 df_display = filtered_for_opts.copy()
-if f_status:
-    df_display = df_display[df_display["Status"].isin(f_status)]
+if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 6. SUMMARY CARDS ---
+# --- 7. SUMMARY CARDS ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
@@ -138,12 +211,11 @@ m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bol
 m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 7. GRAFIK ---
+# --- 8. GRAFIK (UKURAN BESAR) ---
 if not df_display.empty:
-    st.write("")
+    st.write("") 
     g1, g2, g3 = st.columns(3)
-    
-    # Pie PIC
+
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -153,7 +225,6 @@ if not df_display.empty:
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Pie Status
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -164,7 +235,6 @@ if not df_display.empty:
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Bar Units
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -173,14 +243,18 @@ if not df_display.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATA EDITOR ---
+# --- 9. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_cascading_final",
-    column_config={"Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"])})
+    column_config={
+        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
+        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
+        "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"])
+    })
 
-# --- 9. ACTIONS ---
+# --- 10. ACTIONS ---
 c_save, c_exp, _ = st.columns([1.5, 1.5, 4])
 if c_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
