@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (DOUBLE BACKDROP HEADER) ---
+# --- 3. CUSTOM CSS ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -45,7 +45,6 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER STYLING */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -57,7 +56,7 @@ st.markdown(f"""
         align-items: center;
         text-align: center;
         margin-bottom: 30px;
-        background-image: url("data:image/jpg;base64,{header_bg_base64}");
+        background-image: url("data:image/jpeg;base64,{header_bg_base64}");
         background-size: cover;
         background-position: center;
         border: 2px solid #1f4e79;
@@ -113,6 +112,19 @@ st.markdown(f"""
         border: 1px solid #e2e8f0;
         text-align: center;
         border-bottom: 5px solid #1f4e79;
+        margin-bottom: 10px;
+    }}
+
+    .title-box {{
+        background: white; 
+        padding: 10px; 
+        border-radius: 5px; 
+        border: 1px solid #e2e8f0; 
+        text-align: center; 
+        font-weight: bold; 
+        color: #1f4e79;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }}
 
     .chart-box {{
@@ -161,11 +173,9 @@ st.markdown(f"""
     <div style="border-bottom: 4px solid #1f4e79; margin-bottom: 30px;"></div>
     """, unsafe_allow_html=True)
 
-# --- 6. FILTER & CHART TITLES IN BOXES ---
+# --- 6. FILTER ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
-    
-    # Baris Pertama: Filter Utama
     c_dept, c_fleet, c_unit, c_stat_filter = st.columns(4)
     
     filtered_for_opts = df_master.copy()
@@ -183,30 +193,34 @@ with st.container():
 
     f_status = c_stat_filter.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
 
-    # Baris Kedua: Box Putih untuk Judul Grafik
-    st.write("---")
-    t1, t2, t3 = st.columns(3)
-    # Memindahkan judul ke dalam box (sebagai label st.info atau empty box)
-    t1.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">PIC</div>', unsafe_allow_html=True)
-    t2.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">STATUS</div>', unsafe_allow_html=True)
-    t3.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">TOP 5 UNITS</div>', unsafe_allow_html=True)
-
 df_display = filtered_for_opts.copy()
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 7. SUMMARY CARDS ---
+# --- 7. SUMMARY CARDS & MOVED TITLES ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
 
 m1, m2, m3 = st.columns(3)
-m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:36px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>', unsafe_allow_html=True)
-m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
-m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (TANPA JUDUL INTERNAL) ---
+# Kolom 1: Total Items -> Judul PIC
+with m1:
+    st.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:36px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="title-box">PIC</div>', unsafe_allow_html=True)
+
+# Kolom 2: Outstanding -> Judul STATUS
+with m2:
+    st.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="title-box">STATUS</div>', unsafe_allow_html=True)
+
+# Kolom 3: Complete -> Judul TOP 5 UNITS
+with m3:
+    st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
+
+# --- 8. GRAFIK ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
 
@@ -215,7 +229,7 @@ if not df_display.empty:
         pic_counts = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5, marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2)))])
         fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(color='white', size=14, family="Arial Black"))
-        fig1.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        fig1.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -225,7 +239,7 @@ if not df_display.empty:
         color_map = {'Complete': '#2ecc71', 'Outstanding': '#ff69b4', 'On Process': '#3b82f6'}
         fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5, marker=dict(colors=[color_map.get(s, '#94a3b8') for s in st_counts.index], line=dict(color='#FFFFFF', width=2)))])
         fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(color='white', size=14, family="Arial Black"))
-        fig2.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        fig2.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -233,7 +247,7 @@ if not df_display.empty:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count'], marker=dict(color=px.colors.qualitative.Vivid[:len(unit_data)], line=dict(color='#FFFFFF', width=2)), text=unit_data['count'], textposition='inside', textfont=dict(color='white', family="Arial Black", size=16)))
-        fig3.update_layout(height=400, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(tickfont=dict(family="Arial Black", size=14, color="#1f4e79")), margin=dict(t=20, b=0, l=0, r=0))
+        fig3.update_layout(height=450, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(tickfont=dict(family="Arial Black", size=14, color="#1f4e79")), margin=dict(t=20, b=0, l=0, r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -241,7 +255,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_moved_titles",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_moved_titles_final",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
