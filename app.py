@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (100% OPACITY & WHITE HEADER FONT) ---
+# --- 3. CUSTOM CSS (WHITE HEADER FONT) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -77,11 +77,12 @@ st.markdown(f"""
         z-index: 2;
     }}
 
+    /* Perubahan warna font menjadi PUTIH */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
         font-weight: 900; 
-        color: #ffffff; /* Judul Putih */
+        color: #ffffff; 
         margin: 0; 
         line-height: 1.1; 
         letter-spacing: -1px;
@@ -92,7 +93,7 @@ st.markdown(f"""
     .giant-sub {{ 
         font-family: 'Bebas Neue', cursive; 
         font-size: 28px; 
-        color: #ffffff; /* Sub-judul Putih */
+        color: #ffffff; 
         margin: 10px 0 0 0; 
         font-weight: 400; 
         letter-spacing: 4px;
@@ -157,7 +158,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 5. RENDER HEADER (100% OPACITY BG2.jpg) ---
+# --- 5. RENDER HEADER (WHITE TEXT) ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -240,7 +241,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_final_revision",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_final_white_font",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
