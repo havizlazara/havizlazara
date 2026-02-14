@@ -89,9 +89,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=600)
 def load_data():
-    data = conn.read(ttl=0) 
+    data = conn.read(ttl=0)
     if data is None or data.empty:
-        cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
+        # Menambahkan 'Dept.' di urutan pertama kolom
+        cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
     cols_to_fix = ['Material', 'PO No', 'Resv']
@@ -103,7 +104,8 @@ def load_data():
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
-    str_cols = ['Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
+    # Standarisasi kolom teks termasuk 'Dept.'
+    str_cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str)
@@ -162,12 +164,11 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (LABELS INSIDE & WHITE FONT) ---
+# --- 6. GRAFIK ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE CHART PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -177,7 +178,6 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2))
         )])
-        # Memastikan label ada di DALAM dan berwarna PUTIH
         fig.update_traces(
             textinfo='label+percent', 
             textposition='inside',
@@ -188,7 +188,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. PIE CHART STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -201,7 +200,6 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2))
         )])
-        # Memastikan label ada di DALAM dan berwarna PUTIH
         fig.update_traces(
             textinfo='label+percent', 
             textposition='inside',
@@ -212,7 +210,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR CHART UNIT
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -225,8 +222,8 @@ if not df_display.empty:
                 line=dict(color='#FFFFFF', width=2)
             ),
             text=unit_data['count'], 
-            textposition='inside', # Angka muncul di DALAM batang
-            textfont=dict(color='white', family="Arial Black", size=14) # Font PUTIH tebal
+            textposition='inside',
+            textfont=dict(color='white', family="Arial Black", size=14)
         ))
         
         fig.update_layout(
@@ -252,8 +249,9 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_WhiteFont",
+    key="editor_stranger_vFinal_DeptAdded",
     column_config={
+        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True), # Kolom Dept di sisi kiri
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
