@@ -10,7 +10,7 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. SIDEBAR CUSTOMIZER (FITUR BARU) ---
+# --- 1. SIDEBAR CUSTOMIZER ---
 with st.sidebar:
     st.header("🎨 Theme Customizer")
     # Pilihan warna background utama
@@ -20,10 +20,10 @@ with st.sidebar:
     st.divider()
     st.info("Warna ini akan diterapkan secara real-time ke seluruh dashboard.")
 
-# --- 2. CUSTOM CSS (DYNAMIC THEME) ---
+# --- 2. CUSTOM CSS (FIXED SYNTAX ERROR) ---
+# Menggunakan double curly braces {{ }} agar tidak bentrok dengan f-string Python
 st.markdown(f"""
     <style>
-    /* Menggunakan variabel warna dari sidebar */
     .stApp {{ 
         background-color: {bg_color}; 
     }}
@@ -82,7 +82,7 @@ st.markdown(f"""
 
     .stButton>button {{ 
         width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; border: none;
-    }
+    }}
     .stButton>button:hover {{ background-color: #931613; color: white; }}
     </style>
     """, unsafe_allow_html=True)
@@ -253,7 +253,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_theme_customizer",
+    key="editor_theme_fixed_final",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
