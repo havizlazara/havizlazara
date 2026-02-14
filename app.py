@@ -10,7 +10,7 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CUSTOM CSS (STRANGER THINGS STYLE) ---
+# --- 1. CUSTOM CSS (STRANGER THINGS STYLE & BOXED DESIGN) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
@@ -25,6 +25,7 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
     
+    /* Judul Gaya Stranger Things */
     .giant-title { 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
@@ -57,6 +58,7 @@ st.markdown("""
     
     .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
 
+    /* Box Metrik: Memenuhi Lebar, Tinggi Pas Angka */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
@@ -65,8 +67,10 @@ st.markdown("""
         border: 1px solid #e2e8f0;
         text-align: center;
         border-bottom: 5px solid #C11B17;
+        height: auto;
     }
 
+    /* Box Pembatas Grafik (Putih & Rapi) */
     .chart-box {
         background-color: #ffffff;
         border: 2px solid #e2e8f0;
@@ -93,14 +97,16 @@ def load_data():
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
+    # Cleaning format angka
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
+    # PERBAIKAN: Doc Date Hanya Tanggal (Tanpa Jam)
     if 'Doc Date' in data.columns:
-        data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce')
+        data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
     str_cols = ['Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
@@ -161,12 +167,12 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (GLOSSY REVISION) ---
+# --- 6. GRAFIK (BOXED & COLORED) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE CHART PIC (Warna-warni Glossy)
+    # 1. PIE PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -181,11 +187,10 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. PIE CHART STATUS (Hijau & Pink Glossy)
+    # 2. PIE STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
-        # Mendefinisikan warna spesifik: Hijau Glossy untuk Complete, Pink untuk Outstanding
         color_map = {'Complete': '#2ecc71', 'Outstanding': '#ff69b4', 'On Process': '#3b82f6'}
         colors = [color_map.get(s, '#94a3b8') for s in st_counts.index]
         
@@ -200,20 +205,17 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR CHART UNITS (Biru Glossy Berbeda-beda)
+    # 3. BAR UNIT (Warna Berbeda & Box Putih)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        
-        # Menggunakan palet biru yang berbeda untuk setiap batang
-        blue_glossy_palette = ['#1E90FF', '#00BFFF', '#0000FF', '#4169E1', '#4682B4']
         
         fig = go.Figure(go.Bar(
             x=unit_data['Unit no'], 
             y=unit_data['count'],
             marker=dict(
-                color=blue_glossy_palette[:len(unit_data)], 
-                line=dict(color='#FFFFFF', width=2)
+                color=px.colors.qualitative.Vivid[:len(unit_data)], # Warna berbeda tiap bar
+                line=dict(color='#FFFFFF', width=2) # Efek glossy
             ),
             text=unit_data['count'], 
             textposition='auto',
@@ -239,10 +241,11 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_Glossy",
+    key="editor_stranger_vFinal_DateFix",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
+        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), # Format tanggal rapi
         "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=130),
         "Update Status": st.column_config.TextColumn("Update Status", width=400)
     }
