@@ -45,7 +45,7 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER DENGAN BACKGROUND DAN OVERLAY BIRU MUDA */
+    /* HEADER STYLING */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -63,7 +63,6 @@ st.markdown(f"""
         border: 2px solid #1f4e79;
     }}
 
-    /* BACKDROP BIRU MUDA (Layer Utama Header) */
     .custom-header::after {{
         content: "";
         position: absolute;
@@ -77,7 +76,6 @@ st.markdown(f"""
         z-index: 2;
     }}
 
-    /* JUDUL DENGAN BACKDROP BIRU GELAP (SAMA DENGAN SUB-JUDUL) */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 58px; 
@@ -85,9 +83,7 @@ st.markdown(f"""
         color: #ffffff !important; 
         margin: 0; 
         line-height: 1.2; 
-        letter-spacing: -1px;
-        text-transform: uppercase;
-        background: rgba(31, 78, 121, 0.6); /* Backdrop Biru Gelap */
+        background: rgba(31, 78, 121, 0.6); 
         padding: 5px 25px;
         border-radius: 10px;
         display: inline-block;
@@ -101,19 +97,13 @@ st.markdown(f"""
         margin: 15px 0 0 0; 
         font-weight: 400; 
         letter-spacing: 5px;
-        background: rgba(31, 78, 121, 0.6); /* Backdrop Biru Gelap */
+        background: rgba(31, 78, 121, 0.6); 
         padding: 2px 20px;
         border-radius: 8px;
         display: inline-block;
-        text-shadow: 1px 1px 4px rgba(0,0,0,0.6);
     }}
     
-    .logo-img-header {{ 
-        height: 115px; 
-        width: auto; 
-        margin-bottom: 25px;
-        filter: drop-shadow(0px 0px 15px rgba(255,255,255,0.8));
-    }}
+    .logo-img-header {{ height: 115px; width: auto; margin-bottom: 25px; filter: drop-shadow(0px 0px 15px rgba(255,255,255,0.8)); }}
 
     .metric-card {{
         background: {card_color};
@@ -145,15 +135,12 @@ def load_data():
     if data is None or data.empty:
         cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
-    
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str).replace('0', '')
-    
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
-    
     str_cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status', 'Update Status']
     for col in str_cols:
         if col in data.columns:
@@ -167,34 +154,42 @@ st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
             <img src="data:image/jpeg;base64,{logo_base64}" class="logo-img-header">
-            <br>
-            <h1 class="giant-title">Purchase Order Monitoring</h1>
-            <br>
+            <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
             <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
     </div>
     <div style="border-bottom: 4px solid #1f4e79; margin-bottom: 30px;"></div>
     """, unsafe_allow_html=True)
 
-# --- 6. FILTER (CASCADING) ---
+# --- 6. FILTER & CHART TITLES IN BOXES ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
-    c0, c1, c2, c3 = st.columns(4)
+    
+    # Baris Pertama: Filter Utama
+    c_dept, c_fleet, c_unit, c_stat_filter = st.columns(4)
     
     filtered_for_opts = df_master.copy()
     def get_dynamic_opts(df, col):
         return sorted([x for x in df[col].unique() if x and str(x) != "nan"])
 
-    f_dept = c0.multiselect("Filter Dept.", options=get_dynamic_opts(df_master, "Dept."))
+    f_dept = c_dept.multiselect("Filter Dept.", options=get_dynamic_opts(df_master, "Dept."))
     if f_dept: filtered_for_opts = filtered_for_opts[filtered_for_opts["Dept."].isin(f_dept)]
 
-    f_fleet = c1.multiselect("Filter Fleet", options=get_dynamic_opts(filtered_for_opts, "Fleet"))
+    f_fleet = c_fleet.multiselect("Filter Fleet", options=get_dynamic_opts(filtered_for_opts, "Fleet"))
     if f_fleet: filtered_for_opts = filtered_for_opts[filtered_for_opts["Fleet"].isin(f_fleet)]
 
-    f_unit = c2.multiselect("Filter Unit", options=get_dynamic_opts(filtered_for_opts, "Unit no"))
+    f_unit = c_unit.multiselect("Filter Unit", options=get_dynamic_opts(filtered_for_opts, "Unit no"))
     if f_unit: filtered_for_opts = filtered_for_opts[filtered_for_opts["Unit no"].isin(f_unit)]
 
-    f_status = c3.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
+    f_status = c_stat_filter.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
+
+    # Baris Kedua: Box Putih untuk Judul Grafik
+    st.write("---")
+    t1, t2, t3 = st.columns(3)
+    # Memindahkan judul ke dalam box (sebagai label st.info atau empty box)
+    t1.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">PIC</div>', unsafe_allow_html=True)
+    t2.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">STATUS</div>', unsafe_allow_html=True)
+    t3.markdown('<div style="background:white; padding:10px; border-radius:5px; border:1px solid #e2e8f0; text-align:center; font-weight:bold; color:#1f4e79;">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
 df_display = filtered_for_opts.copy()
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
@@ -211,9 +206,8 @@ m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bol
 m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK ---
+# --- 8. GRAFIK (TANPA JUDUL INTERNAL) ---
 if not df_display.empty:
-    st.write("") 
     g1, g2, g3 = st.columns(3)
 
     with g1:
@@ -221,7 +215,7 @@ if not df_display.empty:
         pic_counts = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5, marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2)))])
         fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(color='white', size=14, family="Arial Black"))
-        fig1.update_layout(title_text="Workload by PIC", title_x=0.5, height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
+        fig1.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -231,7 +225,7 @@ if not df_display.empty:
         color_map = {'Complete': '#2ecc71', 'Outstanding': '#ff69b4', 'On Process': '#3b82f6'}
         fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5, marker=dict(colors=[color_map.get(s, '#94a3b8') for s in st_counts.index], line=dict(color='#FFFFFF', width=2)))])
         fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(color='white', size=14, family="Arial Black"))
-        fig2.update_layout(title_text="Status Distribution", title_x=0.5, height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
+        fig2.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -239,7 +233,7 @@ if not df_display.empty:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count'], marker=dict(color=px.colors.qualitative.Vivid[:len(unit_data)], line=dict(color='#FFFFFF', width=2)), text=unit_data['count'], textposition='inside', textfont=dict(color='white', family="Arial Black", size=16)))
-        fig3.update_layout(title_text="Top 5 Units", title_x=0.5, height=450, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(tickfont=dict(family="Arial Black", size=14, color="#1f4e79")))
+        fig3.update_layout(height=400, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(tickfont=dict(family="Arial Black", size=14, color="#1f4e79")), margin=dict(t=20, b=0, l=0, r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -247,7 +241,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_double_backdrop_v1",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_moved_titles",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
