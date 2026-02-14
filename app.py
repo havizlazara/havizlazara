@@ -10,10 +10,9 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CUSTOM CSS (STRANGER THINGS STYLE & BORDERED DESIGN) ---
+# --- 1. CUSTOM CSS (STRANGER THINGS STYLE) ---
 st.markdown("""
     <style>
-    /* Import Font Retro/Serif yang mirip Stranger Things */
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
     .stApp { background-color: #f1f5f9; }
@@ -26,17 +25,16 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
     
-    /* Judul Gaya Stranger Things */
     .giant-title { 
-        font-family: 'Libre Baskerville', serif; /* Font Serif tebal mirip Benguiat */
+        font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
         font-weight: 900; 
-        color: #C11B17; /* Warna merah gelap khas Stranger Things */
+        color: #C11B17; 
         margin: 0; 
         line-height: 1.1; 
         letter-spacing: -1px;
         text-transform: uppercase;
-        text-shadow: 3px 3px 5px rgba(0,0,0,0.3); /* Efek emboss/bayangan */
+        text-shadow: 3px 3px 5px rgba(0,0,0,0.3);
     }
     
     .giant-sub { 
@@ -54,16 +52,11 @@ st.markdown("""
         gap: 30px;
         margin-bottom: 25px;
         padding: 10px;
-        border-bottom: 3px solid #C11B17; /* Garis pembatas merah */
+        border-bottom: 3px solid #C11B17;
     }
     
-    .logo-img {
-        height: 120px;
-        width: auto;
-        mix-blend-mode: multiply;
-    }
+    .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
 
-    /* Box Metrik */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
@@ -72,10 +65,8 @@ st.markdown("""
         border: 1px solid #e2e8f0;
         text-align: center;
         border-bottom: 5px solid #C11B17;
-        height: auto;
     }
 
-    /* Box Pembatas Grafik */
     .chart-box {
         background-color: #ffffff;
         border: 2px solid #e2e8f0;
@@ -86,18 +77,9 @@ st.markdown("""
     }
 
     .stButton>button { 
-        width: 100%; 
-        background-color: #C11B17; 
-        color: white; 
-        border-radius: 8px; 
-        font-weight: bold; 
-        height: 3.5em; 
-        border: none;
+        width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; border: none;
     }
-    .stButton>button:hover {
-        background-color: #931613;
-        color: white;
-    }
+    .stButton>button:hover { background-color: #931613; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -132,7 +114,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 3. HEADER (STRANGER THINGS STYLE) ---
+# --- 3. HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -169,26 +151,17 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. SUMMARY CARDS (FULL WIDTH) ---
+# --- 5. SUMMARY CARDS ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
 
 m1, m2, m3 = st.columns(3)
-m1.markdown(f"""<div class="metric-card">
-            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">TOTAL ITEMS</p>
-            <p style="font-size:32px; font-weight:800; color:#1f4e79; margin:0;">{total}</p>
-        </div>""", unsafe_allow_html=True)
-m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;">
-            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p>
-            <p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p>
-        </div>""", unsafe_allow_html=True)
-m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;">
-            <p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p>
-            <p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p>
-        </div>""", unsafe_allow_html=True)
+m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:32px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>""", unsafe_allow_html=True)
+m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
+m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK DENGAN KOTAK PEMBATAS ---
+# --- 6. GRAFIK (PERBAIKAN WARNA) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -196,8 +169,9 @@ if not df_display.empty:
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
+        # PERBAIKAN: Gunakan sequential.Reds bukan qualitative.Reds
         fig = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5,
-                                    marker=dict(colors=px.colors.qualitative.Reds, line=dict(color='#FFFFFF', width=2)))])
+                                    marker=dict(colors=px.colors.sequential.Reds, line=dict(color='#FFFFFF', width=2)))])
         fig.update_traces(textinfo='label+percent', pull=[0.05]*len(pic_counts))
         fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
@@ -230,7 +204,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_v1",
+    key="editor_stranger_vFixed",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
