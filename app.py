@@ -97,6 +97,7 @@ def load_data():
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
+    # Cleaning format angka
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
@@ -165,12 +166,12 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (BOXED & TEXT STYLING) ---
+# --- 6. GRAFIK (PERBAIKAN FONT & VISIBILITAS) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE PIC (Bold & White Text)
+    # 1. PIE PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -180,17 +181,18 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2))
         )])
-        # Update: Teks Putih & Bold (Arial Black)
+        # Update: textposition='auto' agar label kecil muncul di luar jika tidak muat di dalam
         fig.update_traces(
             textinfo='label+percent', 
             pull=[0.05]*len(pic_counts),
-            textfont=dict(color='white', size=13, family="Arial Black")
+            textfont=dict(color='white', size=12, family="Arial Black"),
+            textposition='auto'
         )
         fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. PIE STATUS (Bold & White Text)
+    # 2. PIE STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -203,17 +205,18 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2))
         )])
-        # Update: Teks Putih & Bold (Arial Black)
+        # Update: textposition='auto' & font bold putih
         fig.update_traces(
             textinfo='label+percent', 
             pull=[0.1 if s == 'Outstanding' else 0 for s in st_counts.index],
-            textfont=dict(color='white', size=13, family="Arial Black")
+            textfont=dict(color='white', size=12, family="Arial Black"),
+            textposition='auto'
         )
         fig.update_layout(title_text="Status Distribution", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR UNIT (Warna Berbeda & Kotak Putih)
+    # 3. BAR UNIT (Warna Berbeda, Kotak Putih, Font Bold)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -227,6 +230,8 @@ if not df_display.empty:
             ),
             text=unit_data['count'], 
             textposition='auto',
+            # Update: Font angka di bar jadi Bold
+            textfont=dict(family="Arial Black", size=14)
         ))
         
         fig.update_layout(
@@ -237,7 +242,9 @@ if not df_display.empty:
             yaxis_visible=False,
             bargap=0.3,
             paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
+            plot_bgcolor='rgba(0,0,0,0)',
+            # Update: Font label sumbu X jadi Bold
+            xaxis=dict(tickfont=dict(family="Arial Black", size=12))
         )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -249,7 +256,7 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_boxed_final_fixed",
+    key="editor_stranger_vFinal_Styling",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
@@ -277,4 +284,4 @@ with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
     df_display.to_excel(writer, index=False)
 c_exp.download_button("📊 EXPORT EXCEL", data=excel_data.getvalue(), file_name='NHM_Database.xlsx')
 
-st.markdown("<p style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</p>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px; font-size: 14px;'>PT Nusa Halmahera Minerals | SCM Division © 2026</div>", unsafe_allow_html=True)
