@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (BRIGHTER HEADER & RADIANT WHITE TEXT) ---
+# --- 3. CUSTOM CSS (BLUE BACKDROP HEADER) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -45,7 +45,7 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER DENGAN BACKGROUND LEBIH TERANG */
+    /* HEADER DENGAN BACKDROP BIRU MUDA */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -60,15 +60,15 @@ st.markdown(f"""
         background-image: url("data:image/jpg;base64,{header_bg_base64}");
         background-size: cover;
         background-position: center;
-        border: 2px solid #C11B17;
+        border: 2px solid #1f4e79;
     }}
 
-    /* Overlay dibuat lebih terang (opacity dikurangi dari 0.3 ke 0.1) */
+    /* BACKDROP BIRU MUDA (Opacity 40%) */
     .custom-header::after {{
         content: "";
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(255,255,255,0.1); 
+        background: rgba(173, 216, 230, 0.4); /* Warna LightBlue dengan transparansi */
         z-index: 1;
     }}
 
@@ -77,7 +77,6 @@ st.markdown(f"""
         z-index: 2;
     }}
 
-    /* Teks Putih dengan Efek Glow agar Lebih Terang */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 58px; 
@@ -87,8 +86,7 @@ st.markdown(f"""
         line-height: 1.1; 
         letter-spacing: -1px;
         text-transform: uppercase;
-        /* Efek shadow hitam tipis + glow putih tebal agar terbaca di background terang */
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5), 0px 0px 20px rgba(255,255,255,0.4);
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.5); /* Shadow agar kontras dengan biru muda */
     }}
     
     .giant-sub {{ 
@@ -98,9 +96,9 @@ st.markdown(f"""
         margin: 12px 0 0 0; 
         font-weight: 400; 
         letter-spacing: 5px;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
-        background: rgba(0,0,0,0.2); /* Shield tipis agar teks tetap terbaca */
-        padding: 2px 15px;
+        text-shadow: 1px 1px 4px rgba(0,0,0,0.6);
+        background: rgba(31, 78, 121, 0.6); /* Backdrop biru gelap tipis khusus sub-judul */
+        padding: 2px 20px;
         border-radius: 8px;
     }}
     
@@ -108,7 +106,7 @@ st.markdown(f"""
         height: 115px; 
         width: auto; 
         margin-bottom: 25px;
-        filter: drop-shadow(0px 0px 20px rgba(255,255,255,0.8));
+        filter: drop-shadow(0px 0px 15px rgba(255,255,255,0.8));
     }}
 
     .metric-card {{
@@ -118,7 +116,7 @@ st.markdown(f"""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         border: 1px solid #e2e8f0;
         text-align: center;
-        border-bottom: 5px solid #C11B17;
+        border-bottom: 5px solid #1f4e79;
     }}
 
     .chart-box {{
@@ -156,13 +154,9 @@ def load_data():
             data[col] = data[col].fillna("").astype(str)
     return data
 
-try:
-    df_master = load_data()
-except Exception as e:
-    st.error(f"Koneksi Gagal: {e}")
-    st.stop()
+df_master = load_data()
 
-# --- 5. RENDER HEADER (BRIGHT WHITE TEXT) ---
+# --- 5. RENDER HEADER (BLUE BACKDROP) ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -171,7 +165,7 @@ st.markdown(f"""
             <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
     </div>
-    <div style="border-bottom: 4px solid #C11B17; margin-bottom: 30px;"></div>
+    <div style="border-bottom: 4px solid #1f4e79; margin-bottom: 30px;"></div>
     """, unsafe_allow_html=True)
 
 # --- 6. FILTER (CASCADING) ---
@@ -209,7 +203,7 @@ m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bol
 m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK ---
+# --- 8. GRAFIK (UKURAN BESAR) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -245,7 +239,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_bright_header_v1",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_blue_backdrop_v1",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
