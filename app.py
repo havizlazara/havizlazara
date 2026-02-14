@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (WHITE HEADER FONT) ---
+# --- 3. CUSTOM CSS (BRIGHTER HEADER & RADIANT WHITE TEXT) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -45,11 +45,11 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER DENGAN BACKGROUND 100% OPACITY */
+    /* HEADER DENGAN BACKGROUND LEBIH TERANG */
     .custom-header {{
         position: relative;
         width: 100%;
-        padding: 60px 20px;
+        padding: 65px 20px;
         border-radius: 15px;
         overflow: hidden;
         display: flex;
@@ -63,12 +63,12 @@ st.markdown(f"""
         border: 2px solid #C11B17;
     }}
 
-    /* Overlay gelap tipis agar teks putih lebih 'pop' */
+    /* Overlay dibuat lebih terang (opacity dikurangi dari 0.3 ke 0.1) */
     .custom-header::after {{
         content: "";
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.3); 
+        background: rgba(255,255,255,0.1); 
         z-index: 1;
     }}
 
@@ -77,34 +77,38 @@ st.markdown(f"""
         z-index: 2;
     }}
 
-    /* Perubahan warna font menjadi PUTIH */
+    /* Teks Putih dengan Efek Glow agar Lebih Terang */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
-        font-size: 55px; 
+        font-size: 58px; 
         font-weight: 900; 
-        color: #ffffff; 
+        color: #ffffff !important; 
         margin: 0; 
         line-height: 1.1; 
         letter-spacing: -1px;
         text-transform: uppercase;
-        text-shadow: 3px 3px 10px rgba(0,0,0,0.7);
+        /* Efek shadow hitam tipis + glow putih tebal agar terbaca di background terang */
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5), 0px 0px 20px rgba(255,255,255,0.4);
     }}
     
     .giant-sub {{ 
         font-family: 'Bebas Neue', cursive; 
-        font-size: 28px; 
-        color: #ffffff; 
-        margin: 10px 0 0 0; 
+        font-size: 30px; 
+        color: #ffffff !important; 
+        margin: 12px 0 0 0; 
         font-weight: 400; 
-        letter-spacing: 4px;
-        text-shadow: 2px 2px 5px rgba(0,0,0,0.8);
+        letter-spacing: 5px;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
+        background: rgba(0,0,0,0.2); /* Shield tipis agar teks tetap terbaca */
+        padding: 2px 15px;
+        border-radius: 8px;
     }}
     
     .logo-img-header {{ 
-        height: 110px; 
+        height: 115px; 
         width: auto; 
-        margin-bottom: 20px;
-        filter: drop-shadow(0px 0px 15px rgba(0,0,0,0.5));
+        margin-bottom: 25px;
+        filter: drop-shadow(0px 0px 20px rgba(255,255,255,0.8));
     }}
 
     .metric-card {{
@@ -158,7 +162,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 5. RENDER HEADER (WHITE TEXT) ---
+# --- 5. RENDER HEADER (BRIGHT WHITE TEXT) ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -167,7 +171,7 @@ st.markdown(f"""
             <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
     </div>
-    <div style="border-bottom: 3px solid #C11B17; margin-bottom: 25px;"></div>
+    <div style="border-bottom: 4px solid #C11B17; margin-bottom: 30px;"></div>
     """, unsafe_allow_html=True)
 
 # --- 6. FILTER (CASCADING) ---
@@ -241,7 +245,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_final_white_font",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_bright_header_v1",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
