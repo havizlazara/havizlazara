@@ -58,7 +58,7 @@ st.markdown("""
     
     .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
 
-    /* Box Metrik: Memenuhi Lebar, Tinggi Pas Angka */
+    /* Box Metrik */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
@@ -97,14 +97,12 @@ def load_data():
         cols = ['Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
-    # Cleaning format angka
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
-    # PERBAIKAN: Doc Date Hanya Tanggal (Tanpa Jam)
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
@@ -167,12 +165,12 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (BOXED & COLORED) ---
+# --- 6. GRAFIK (BOXED & TEXT STYLING) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE PIC
+    # 1. PIE PIC (Bold & White Text)
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -182,12 +180,17 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=px.colors.qualitative.Bold, line=dict(color='#FFFFFF', width=2))
         )])
-        fig.update_traces(textinfo='label+percent', pull=[0.05]*len(pic_counts))
+        # Update: Teks Putih & Bold (Arial Black)
+        fig.update_traces(
+            textinfo='label+percent', 
+            pull=[0.05]*len(pic_counts),
+            textfont=dict(color='white', size=13, family="Arial Black")
+        )
         fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. PIE STATUS
+    # 2. PIE STATUS (Bold & White Text)
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -200,12 +203,17 @@ if not df_display.empty:
             hole=.5,
             marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2))
         )])
-        fig.update_traces(textinfo='label+percent', pull=[0.1 if s == 'Outstanding' else 0 for s in st_counts.index])
+        # Update: Teks Putih & Bold (Arial Black)
+        fig.update_traces(
+            textinfo='label+percent', 
+            pull=[0.1 if s == 'Outstanding' else 0 for s in st_counts.index],
+            textfont=dict(color='white', size=13, family="Arial Black")
+        )
         fig.update_layout(title_text="Status Distribution", title_x=0.5, height=300, showlegend=False, margin=dict(t=40,b=10,l=10,r=10))
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR UNIT (Warna Berbeda & Box Putih)
+    # 3. BAR UNIT (Warna Berbeda & Kotak Putih)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -214,8 +222,8 @@ if not df_display.empty:
             x=unit_data['Unit no'], 
             y=unit_data['count'],
             marker=dict(
-                color=px.colors.qualitative.Vivid[:len(unit_data)], # Warna berbeda tiap bar
-                line=dict(color='#FFFFFF', width=2) # Efek glossy
+                color=px.colors.qualitative.Vivid[:len(unit_data)],
+                line=dict(color='#FFFFFF', width=2)
             ),
             text=unit_data['count'], 
             textposition='auto',
@@ -241,11 +249,11 @@ df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_DateFix",
+    key="editor_boxed_final_fixed",
     column_config={
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
-        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), # Format tanggal rapi
+        "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
         "Status": st.column_config.SelectboxColumn("Status", options=["Complete", "Outstanding", "On Process"], width=130),
         "Update Status": st.column_config.TextColumn("Update Status", width=400)
     }
