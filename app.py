@@ -10,23 +10,35 @@ import base64
 # Konfigurasi Halaman
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# --- 1. CUSTOM CSS (STRANGER THINGS STYLE & CENTER ALIGNMENT) ---
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
+# --- 1. SIDEBAR CUSTOMIZER (FITUR BARU) ---
+with st.sidebar:
+    st.header("🎨 Theme Customizer")
+    # Pilihan warna background utama
+    bg_color = st.color_picker("Pilih Warna Background", "#f1f5f9")
+    # Pilihan warna card/kontainer
+    card_color = st.color_picker("Pilih Warna Card", "#ffffff")
+    st.divider()
+    st.info("Warna ini akan diterapkan secara real-time ke seluruh dashboard.")
 
-    .stApp { background-color: #f1f5f9; }
-    .main .block-container {
-        background-color: #ffffff;
+# --- 2. CUSTOM CSS (DYNAMIC THEME) ---
+st.markdown(f"""
+    <style>
+    /* Menggunakan variabel warna dari sidebar */
+    .stApp {{ 
+        background-color: {bg_color}; 
+    }}
+    .main .block-container {{
+        background-color: {card_color}; 
         padding: 2rem 3rem; 
         max-width: 98%;
         margin: auto;
         border-radius: 12px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-    }
+    }}
     
-    /* Judul Gaya Stranger Things */
-    .giant-title { 
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
+
+    .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
         font-weight: 900; 
@@ -36,48 +48,46 @@ st.markdown("""
         letter-spacing: -1px;
         text-transform: uppercase;
         text-shadow: 3px 3px 5px rgba(0,0,0,0.3);
-    }
+    }}
     
-    .giant-sub { 
+    .giant-sub {{ 
         font-family: 'Bebas Neue', cursive; 
         font-size: 28px; 
         color: #1f4e79; 
         margin: 0; 
         font-weight: 400; 
         letter-spacing: 4px;
-    }
+    }}
     
-    /* Logo Styling */
-    .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
+    .logo-img {{ height: 120px; width: auto; mix-blend-mode: multiply; }}
 
-    /* Card & Box Styling */
-    .metric-card {
-        background: #ffffff;
+    .metric-card {{
+        background: {card_color};
         border-radius: 10px;
         padding: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         border: 1px solid #e2e8f0;
         text-align: center;
         border-bottom: 5px solid #C11B17;
-    }
+    }}
 
-    .chart-box {
-        background-color: #ffffff;
+    .chart-box {{
+        background-color: {card_color};
         border: 2px solid #e2e8f0;
         border-radius: 15px;
         padding: 15px;
         margin-bottom: 20px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.02);
-    }
+    }}
 
-    .stButton>button { 
+    .stButton>button {{ 
         width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; border: none;
     }
-    .stButton>button:hover { background-color: #931613; color: white; }
+    .stButton>button:hover {{ background-color: #931613; color: white; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA ---
+# --- 3. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=60)
@@ -108,7 +118,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 3. HEADER (CENTERED) ---
+# --- 4. HEADER (CENTERED) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -128,7 +138,7 @@ st.markdown(f"""
     <div style="border-bottom: 3px solid #C11B17; margin-bottom: 25px;"></div>
     """, unsafe_allow_html=True)
 
-# --- 4. FILTER (DENGAN DEPT.) ---
+# --- 5. FILTER ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c0, c1, c2, c3 = st.columns(4)
@@ -148,7 +158,7 @@ if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 
-# --- 5. SUMMARY CARDS ---
+# --- 6. SUMMARY CARDS ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
@@ -158,7 +168,7 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (WHITE BOLD INSIDE) ---
+# --- 7. GRAFIK ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -178,7 +188,8 @@ if not df_display.empty:
             insidetextorientation='horizontal',
             textfont=dict(color='white', size=12, family="Arial Black")
         )
-        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=350, showlegend=False, margin=dict(t=50,b=20,l=20,r=20))
+        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=350, showlegend=False, 
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -200,7 +211,8 @@ if not df_display.empty:
             insidetextorientation='horizontal',
             textfont=dict(color='white', size=12, family="Arial Black")
         )
-        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=350, showlegend=False, margin=dict(t=50,b=20,l=20,r=20))
+        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=350, showlegend=False,
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -234,14 +246,14 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 7. DATA EDITOR ---
+# --- 8. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display if (f_dept or f_fleet or f_unit or f_status or search_query) else df_master
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_FullCenter",
+    key="editor_theme_customizer",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
@@ -252,7 +264,7 @@ edited_data = st.data_editor(
     }
 )
 
-# --- 8. ACTIONS ---
+# --- 9. ACTIONS ---
 c_save, c_exp, _ = st.columns([1.5, 1.5, 4])
 if c_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
