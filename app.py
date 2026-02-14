@@ -27,7 +27,7 @@ def get_base64_image(image_path):
 
 header_bg_base64 = get_base64_image("BG2.jpg")
 # Memastikan menggunakan file NHM.jpg untuk logo
-logo_base64 = get_base64_image("logo NHM.jpg")
+logo_base64 = get_base64_image("logo NHM.png")
 
 # --- 3. CUSTOM CSS (RESPONSIVE & STYLING) ---
 st.markdown(f"""
