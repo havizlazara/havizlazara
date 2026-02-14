@@ -18,10 +18,10 @@ with st.sidebar:
     # Pilihan warna card/kontainer
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Warna ini akan diterapkan secara real-time ke seluruh dashboard.")
+    st.info("Gunakan panel ini untuk mengubah suasana dashboard secara instan.")
 
-# --- 2. CUSTOM CSS (FIXED SYNTAX ERROR) ---
-# Menggunakan double curly braces {{ }} agar tidak bentrok dengan f-string Python
+# --- 2. CUSTOM CSS (FIXED SYNTAX & LAYOUT) ---
+# Menggunakan double curly braces {{ }} agar tidak terjadi SyntaxError pada f-string
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -38,6 +38,7 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
+    /* Judul Stranger Things */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
@@ -61,6 +62,7 @@ st.markdown(f"""
     
     .logo-img {{ height: 120px; width: auto; mix-blend-mode: multiply; }}
 
+    /* Card & Chart Box */
     .metric-card {{
         background: {card_color};
         border-radius: 10px;
@@ -75,9 +77,9 @@ st.markdown(f"""
         background-color: {card_color};
         border: 2px solid #e2e8f0;
         border-radius: 15px;
-        padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }}
 
     .stButton>button {{ 
@@ -90,13 +92,14 @@ st.markdown(f"""
 # --- 3. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60) # Refresh setiap 60 detik agar data dari Sheets cepat muncul
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
+    # Perbaikan tipe data
     cols_to_fix = ['Material', 'PO No', 'Resv']
     for col in cols_to_fix:
         if col in data.columns:
@@ -164,15 +167,16 @@ outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
 
 m1, m2, m3 = st.columns(3)
-m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:32px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>""", unsafe_allow_html=True)
-m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
-m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
+m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:14px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:36px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>""", unsafe_allow_html=True)
+m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
+m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 7. GRAFIK ---
+# --- 7. GRAFIK (UKURAN BESAR & FONT PUTIH) ---
 if not df_display.empty:
-    st.write("") 
+    st.write("") # Spacer
     g1, g2, g3 = st.columns(3)
 
+    # 1. PIE CHART PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -186,13 +190,15 @@ if not df_display.empty:
             textinfo='label+percent', 
             textposition='inside',
             insidetextorientation='horizontal',
-            textfont=dict(color='white', size=12, family="Arial Black")
+            textfont=dict(color='white', size=14, family="Arial Black")
         )
-        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=350, showlegend=False, 
+        # Tinggi ditingkatkan menjadi 450 agar lebih besar
+        fig.update_layout(title_text="Workload by PIC", title_x=0.5, height=450, showlegend=False, 
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 2. PIE CHART STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -209,13 +215,15 @@ if not df_display.empty:
             textinfo='label+percent', 
             textposition='inside',
             insidetextorientation='horizontal',
-            textfont=dict(color='white', size=12, family="Arial Black")
+            textfont=dict(color='white', size=14, family="Arial Black")
         )
-        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=350, showlegend=False,
+        # Tinggi ditingkatkan menjadi 450
+        fig.update_layout(title_text="Status Distribution", title_x=0.5, height=450, showlegend=False,
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 3. BAR CHART UNIT
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -229,19 +237,20 @@ if not df_display.empty:
             ),
             text=unit_data['count'], 
             textposition='inside',
-            textfont=dict(color='white', family="Arial Black", size=14)
+            textfont=dict(color='white', family="Arial Black", size=16)
         ))
         
+        # Tinggi ditingkatkan menjadi 450
         fig.update_layout(
             title_text="Top 5 Units", 
             title_x=0.5, 
-            height=350, 
-            margin=dict(t=50,b=30,l=20,r=20), 
+            height=450, 
+            margin=dict(t=60,b=30,l=20,r=20), 
             yaxis_visible=False,
             bargap=0.3,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(tickfont=dict(family="Arial Black", size=12, color="#1f4e79"))
+            xaxis=dict(tickfont=dict(family="Arial Black", size=14, color="#1f4e79"))
         )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -252,8 +261,8 @@ df_to_edit = df_display if (f_dept or f_fleet or f_unit or f_status or search_qu
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
-    df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_theme_fixed_final",
+    df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=500,
+    key="editor_large_charts_final",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
@@ -272,7 +281,7 @@ if c_save.button("💾 SIMPAN & SYNC CLOUD"):
         if 'Doc Date' in final_df.columns:
             final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
         conn.update(data=final_df)
-        st.cache_data.clear()
+        st.cache_data.clear() # Reset cache setelah simpan
         st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e: st.error(f"Gagal: {e}")
