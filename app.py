@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Panel ini mengatur warna di luar area header ber-background gambar.")
+    st.info("Panel ini mengatur area di luar header.")
 
 # --- 2. FUNGSI ENKODE GAMBAR KE BASE64 ---
 def get_base64_image(image_path):
@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (DYNAMIC THEME & HEADER BACKGROUND) ---
+# --- 3. CUSTOM CSS (100% OPACITY & WHITE HEADER FONT) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -45,11 +45,11 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER KHUSUS DENGAN BACKGROUND GAMBAR */
+    /* HEADER DENGAN BACKGROUND 100% OPACITY */
     .custom-header {{
         position: relative;
         width: 100%;
-        padding: 40px 20px;
+        padding: 60px 20px;
         border-radius: 15px;
         overflow: hidden;
         display: flex;
@@ -57,22 +57,21 @@ st.markdown(f"""
         align-items: center;
         text-align: center;
         margin-bottom: 30px;
-        background: #000; /* Dasar hitam jika gambar gagal muat */
-    }}
-
-    /* Layer Background dengan Opacity 50% */
-    .custom-header::before {{
-        content: "";
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
         background-image: url("data:image/jpg;base64,{header_bg_base64}");
         background-size: cover;
         background-position: center;
-        opacity: 0.5; /* Opacity 50% */
+        border: 2px solid #C11B17;
+    }}
+
+    /* Overlay gelap tipis agar teks putih lebih 'pop' */
+    .custom-header::after {{
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.3); 
         z-index: 1;
     }}
 
-    /* Layer Konten di atas Background */
     .header-content {{
         position: relative;
         z-index: 2;
@@ -82,31 +81,29 @@ st.markdown(f"""
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
         font-weight: 900; 
-        color: #C11B17; 
+        color: #ffffff; /* Judul Putih */
         margin: 0; 
         line-height: 1.1; 
         letter-spacing: -1px;
         text-transform: uppercase;
-        text-shadow: 2px 2px 8px rgba(255,255,255,0.8); /* Glow putih agar teks merah terbaca jelas */
+        text-shadow: 3px 3px 10px rgba(0,0,0,0.7);
     }}
     
     .giant-sub {{ 
         font-family: 'Bebas Neue', cursive; 
         font-size: 28px; 
-        color: #1f4e79; 
-        margin: 5px 0 0 0; 
+        color: #ffffff; /* Sub-judul Putih */
+        margin: 10px 0 0 0; 
         font-weight: 400; 
         letter-spacing: 4px;
-        background: rgba(255,255,255,0.6); /* Background tipis untuk sub-judul */
-        padding: 2px 10px;
-        border-radius: 5px;
+        text-shadow: 2px 2px 5px rgba(0,0,0,0.8);
     }}
     
     .logo-img-header {{ 
         height: 110px; 
         width: auto; 
-        margin-bottom: 15px;
-        filter: drop-shadow(0px 0px 10px white);
+        margin-bottom: 20px;
+        filter: drop-shadow(0px 0px 15px rgba(0,0,0,0.5));
     }}
 
     .metric-card {{
@@ -126,10 +123,6 @@ st.markdown(f"""
         padding: 20px;
         margin-bottom: 25px;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-    }}
-
-    .stButton>button {{ 
-        width: 100%; background-color: #C11B17; color: white; border-radius: 8px; font-weight: bold; height: 3.5em; border: none;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -164,7 +157,7 @@ except Exception as e:
     st.error(f"Koneksi Gagal: {e}")
     st.stop()
 
-# --- 5. RENDER HEADER (WITH BACKGROUND IMAGE) ---
+# --- 5. RENDER HEADER (100% OPACITY BG2.jpg) ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -176,7 +169,7 @@ st.markdown(f"""
     <div style="border-bottom: 3px solid #C11B17; margin-bottom: 25px;"></div>
     """, unsafe_allow_html=True)
 
-# --- 6. FILTER (CASCADING LOGIC) ---
+# --- 6. FILTER (CASCADING) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
     c0, c1, c2, c3 = st.columns(4)
@@ -211,7 +204,7 @@ m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bol
 m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (UKURAN BESAR) ---
+# --- 8. GRAFIK ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -247,7 +240,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_cascading_final",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_final_revision",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
