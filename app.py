@@ -25,7 +25,6 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
     
-    /* Judul Gaya Stranger Things */
     .giant-title { 
         font-family: 'Libre Baskerville', serif;
         font-size: 55px; 
@@ -58,7 +57,6 @@ st.markdown("""
     
     .logo-img { height: 120px; width: auto; mix-blend-mode: multiply; }
 
-    /* Box Metrik */
     .metric-card {
         background: #ffffff;
         border-radius: 10px;
@@ -70,7 +68,6 @@ st.markdown("""
         height: auto;
     }
 
-    /* Box Pembatas Grafik */
     .chart-box {
         background-color: #ffffff;
         border: 2px solid #e2e8f0;
@@ -87,15 +84,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA DENGAN OPTIMASI CACHE ---
+# --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# TTL dikurangi ke 60 detik agar lebih cepat update dari Google Sheets
 @st.cache_data(ttl=60)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        # Menambahkan 'Dept.' di urutan pertama
         cols = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'Supplier', 'Status', 'Update Status']
         return pd.DataFrame(columns=cols)
     
@@ -105,7 +100,6 @@ def load_data():
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype(int).astype(str)
             data[col] = data[col].replace('0', '')
     
-    # Doc Date Hanya Tanggal (Tanpa Jam)
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     
@@ -140,13 +134,16 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 4. FILTER ---
+# --- 4. FILTER (DENGAN TAMBAHAN FILTER DEPT.) ---
 with st.container():
     search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
-    c1, c2, c3 = st.columns(3)
+    # Menambah menjadi 4 kolom filter
+    c0, c1, c2, c3 = st.columns(4)
     def get_opts(col):
         return sorted([x for x in df_master[col].unique() if x and str(x) != "nan"]) if col in df_master.columns else []
     
+    # Filter Dept diletakkan di c0 (Paling kiri)
+    f_dept = c0.multiselect("Filter Dept.", options=get_opts("Dept."))
     f_fleet = c1.multiselect("Filter Fleet", options=get_opts("Fleet"))
     f_unit = c2.multiselect("Filter Unit", options=get_opts("Unit no"))
     f_status = c3.multiselect("Filter Status", options=get_opts("Status"))
@@ -154,6 +151,8 @@ with st.container():
 df_display = df_master.copy()
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
+# Menambahkan logik penapisan Dept
+if f_dept: df_display = df_display[df_display["Dept."].isin(f_dept)]
 if f_fleet: df_display = df_display[df_display["Fleet"].isin(f_fleet)]
 if f_unit: df_display = df_display[df_display["Unit no"].isin(f_unit)]
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
@@ -168,12 +167,11 @@ m1.markdown(f"""<div class="metric-card"><p style="color:#64748b; font-size:12px
 m2.markdown(f"""<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:32px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>""", unsafe_allow_html=True)
 m3.markdown(f"""<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="color:#64748b; font-size:12px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:32px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>""", unsafe_allow_html=True)
 
-# --- 6. GRAFIK (WHITE BOLD FONT INSIDE) ---
+# --- 6. GRAFIK (FONT PUTIH BOLD DI DALAM) ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
 
-    # 1. PIE PIC
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
@@ -193,7 +191,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. PIE STATUS
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
@@ -216,7 +213,6 @@ if not df_display.empty:
         st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. BAR UNIT (White Bold Inside)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
@@ -249,14 +245,14 @@ if not df_display.empty:
 
 # --- 7. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
-df_to_edit = df_display if (f_fleet or f_unit or f_status or search_query) else df_master
+df_to_edit = df_display if (f_dept or f_fleet or f_unit or f_status or search_query) else df_master
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 
 edited_data = st.data_editor(
     df_to_edit, use_container_width=True, hide_index=False, num_rows="dynamic", height=450,
-    key="editor_stranger_vFinal_FullRevision",
+    key="editor_stranger_vFinal_FilterDept_Added",
     column_config={
-        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True), # Kolom Baru
+        "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Fleet": st.column_config.TextColumn("Fleet", width=120, pinned=True),
         "Unit no": st.column_config.TextColumn("Unit", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
@@ -273,7 +269,7 @@ if c_save.button("💾 SIMPAN & SYNC CLOUD"):
         if 'Doc Date' in final_df.columns:
             final_df['Doc Date'] = pd.to_datetime(final_df['Doc Date']).dt.strftime('%Y-%m-%d').replace('NaT', '')
         conn.update(data=final_df)
-        st.cache_data.clear() # Paksa ambil data segar setelah simpan
+        st.cache_data.clear()
         st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e: st.error(f"Gagal: {e}")
