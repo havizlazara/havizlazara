@@ -26,9 +26,10 @@ def get_base64_image(image_path):
     return ""
 
 header_bg_base64 = get_base64_image("BG2.jpg")
+# Memastikan menggunakan file NHM.jpg untuk logo
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (RESPONSIVE TANPA MENGUBAH TAMPILAN WEB) ---
+# --- 3. CUSTOM CSS (RESPONSIVE & STYLING) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -103,7 +104,12 @@ st.markdown(f"""
         display: inline-block;
     }}
     
-    .logo-img-header {{ height: 115px; width: auto; margin-bottom: 25px; filter: drop-shadow(0px 0px 15px rgba(255,255,255,0.8)); }}
+    .logo-img-header {{ 
+        height: 115px; 
+        width: auto; 
+        margin-bottom: 25px; 
+        filter: drop-shadow(0px 0px 15px rgba(255,255,255,0.8)); 
+    }}
 
     .metric-card {{
         background: {card_color};
@@ -136,7 +142,6 @@ st.markdown(f"""
         box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }}
 
-    /* CSS KHUSUS MOBILE (Hanya aktif di layar HP) */
     @media (max-width: 768px) {{
         .giant-title {{ font-size: 28px; padding: 10px; }}
         .giant-sub {{ font-size: 16px; letter-spacing: 2px; }}
@@ -169,7 +174,7 @@ def load_data():
 
 df_master = load_data()
 
-# --- 5. RENDER HEADER ---
+# --- 5. RENDER HEADER (DENGAN LOGO BARU NHM.jpg) ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -260,7 +265,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_responsive_vFinal",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_final_with_new_logo",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
