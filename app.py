@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (BLUE BACKDROP HEADER) ---
+# --- 3. CUSTOM CSS (DOUBLE BACKDROP HEADER) ---
 st.markdown(f"""
     <style>
     .stApp {{ 
@@ -45,7 +45,7 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER DENGAN BACKDROP BIRU MUDA */
+    /* HEADER DENGAN BACKGROUND DAN OVERLAY BIRU MUDA */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -63,12 +63,12 @@ st.markdown(f"""
         border: 2px solid #1f4e79;
     }}
 
-    /* BACKDROP BIRU MUDA (Opacity 40%) */
+    /* BACKDROP BIRU MUDA (Layer Utama Header) */
     .custom-header::after {{
         content: "";
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(173, 216, 230, 0.4); /* Warna LightBlue dengan transparansi */
+        background: rgba(173, 216, 230, 0.4); 
         z-index: 1;
     }}
 
@@ -77,29 +77,35 @@ st.markdown(f"""
         z-index: 2;
     }}
 
+    /* JUDUL DENGAN BACKDROP BIRU GELAP (SAMA DENGAN SUB-JUDUL) */
     .giant-title {{ 
         font-family: 'Libre Baskerville', serif;
         font-size: 58px; 
         font-weight: 900; 
         color: #ffffff !important; 
         margin: 0; 
-        line-height: 1.1; 
+        line-height: 1.2; 
         letter-spacing: -1px;
         text-transform: uppercase;
-        text-shadow: 2px 2px 8px rgba(0,0,0,0.5); /* Shadow agar kontras dengan biru muda */
+        background: rgba(31, 78, 121, 0.6); /* Backdrop Biru Gelap */
+        padding: 5px 25px;
+        border-radius: 10px;
+        display: inline-block;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
     }}
     
     .giant-sub {{ 
         font-family: 'Bebas Neue', cursive; 
         font-size: 30px; 
         color: #ffffff !important; 
-        margin: 12px 0 0 0; 
+        margin: 15px 0 0 0; 
         font-weight: 400; 
         letter-spacing: 5px;
-        text-shadow: 1px 1px 4px rgba(0,0,0,0.6);
-        background: rgba(31, 78, 121, 0.6); /* Backdrop biru gelap tipis khusus sub-judul */
+        background: rgba(31, 78, 121, 0.6); /* Backdrop Biru Gelap */
         padding: 2px 20px;
         border-radius: 8px;
+        display: inline-block;
+        text-shadow: 1px 1px 4px rgba(0,0,0,0.6);
     }}
     
     .logo-img-header {{ 
@@ -156,12 +162,14 @@ def load_data():
 
 df_master = load_data()
 
-# --- 5. RENDER HEADER (BLUE BACKDROP) ---
+# --- 5. RENDER HEADER ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
             <img src="data:image/jpeg;base64,{logo_base64}" class="logo-img-header">
+            <br>
             <h1 class="giant-title">Purchase Order Monitoring</h1>
+            <br>
             <h2 class="giant-sub">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
     </div>
@@ -203,7 +211,7 @@ m1.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bol
 m2.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (UKURAN BESAR) ---
+# --- 8. GRAFIK ---
 if not df_display.empty:
     st.write("") 
     g1, g2, g3 = st.columns(3)
@@ -239,7 +247,7 @@ if not df_display.empty:
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
 df_to_edit.index = range(1, len(df_to_edit) + 1)
-edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_blue_backdrop_v1",
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500, key="editor_double_backdrop_v1",
     column_config={
         "Dept.": st.column_config.TextColumn("Dept.", width=100, pinned=True),
         "Doc Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"), 
