@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Ukuran grafik diperkecil 50% dan label Pie Chart dipertebal.")
+    st.info("Warna status: Merah (Outstanding) & Hijau (Complete).")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -178,7 +178,7 @@ if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
     df_display = df_display[df_display.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 7. SUMMARY CARDS & TITLES ---
+# --- 7. SUMMARY CARDS ---
 total = len(df_display)
 outstanding = len(df_display[df_display['Status'] == 'Outstanding'])
 complete = len(df_display[df_display['Status'] == 'Complete'])
@@ -195,19 +195,16 @@ with m3:
     st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (UKURAN DIKECILKAN 50%) ---
+# --- 8. GRAFIK (UKURAN KOMPAK & WARNA KHUSUS) ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
-    
-    # Tinggi diatur 225px (50% dari sebelumnya 450px)
     chart_height = 225 
 
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5)])
-        # Label BOLD dan format Nama + Persentase
-        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=12, family="Arial Black", color="white"))
+        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=11, family="Arial Black", color="white"))
         fig1.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -215,9 +212,12 @@ if not df_display.empty:
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
-        fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5)])
-        # Label BOLD dan format Nama + Persentase
-        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=12, family="Arial Black", color="white"))
+        # Mapping warna: Outstanding -> Merah, Complete -> Hijau
+        status_colors = {'Outstanding': '#ef4444', 'Complete': '#22c55e', 'On Process': '#3b82f6'}
+        colors = [status_colors.get(s, '#94a3b8') for s in st_counts.index]
+        
+        fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5, marker=dict(colors=colors))])
+        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=11, family="Arial Black", color="white"))
         fig2.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -225,8 +225,11 @@ if not df_display.empty:
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count']))
-        fig3.update_layout(height=chart_height, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
+        # Warna berbeda setiap unit menggunakan skala warna kualitatif
+        fig3 = px.bar(unit_data, x='Unit no', y='count', color='Unit no', 
+                     color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3.update_layout(height=chart_height, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
+        fig3.update_traces(texttemplate='%{y}', textposition='inside', textfont=dict(family="Arial Black"))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
