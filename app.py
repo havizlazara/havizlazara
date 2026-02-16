@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("TTL Data diatur 10 detik untuk keseimbangan kecepatan update.")
+    st.info("Ukuran grafik diperkecil 50% dan label Pie Chart dipertebal.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (RESPONSIVE & LOGO TRANSPARENCY) ---
+# --- 3. CUSTOM CSS ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; }}
@@ -43,7 +43,6 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER STYLING */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -87,10 +86,9 @@ st.markdown(f"""
         border-radius: 8px; display: inline-block;
     }}
     
-    /* MENGHAPUS BACKGROUND PUTIH LOGO SECARA VISUAL */
     .logo-img-header {{ 
         height: 115px; width: auto; margin-bottom: 25px; 
-        mix-blend-mode: multiply; /* Menghilangkan background putih */
+        mix-blend-mode: multiply; 
         filter: contrast(110%);
     }}
 
@@ -108,25 +106,23 @@ st.markdown(f"""
 
     .chart-box {{
         background-color: {card_color}; border: 2px solid #e2e8f0;
-        border-radius: 15px; padding: 20px; margin-bottom: 25px;
+        border-radius: 15px; padding: 15px; margin-bottom: 20px;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }}
 
-    /* RESPONSIVE MEDIA QUERY */
     @media (max-width: 768px) {{
         .giant-title {{ font-size: 28px; padding: 10px; }}
         .giant-sub {{ font-size: 16px; letter-spacing: 2px; }}
         .logo-img-header {{ height: 80px; }}
         .main .block-container {{ padding: 1rem; }}
-        .metric-card {{ margin-bottom: 5px; }}
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. KONEKSI DATA (TTL 10 DETIK) ---
+# --- 4. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=10) # Dipercepat agar data cepat terupdate
+@st.cache_data(ttl=10)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
@@ -199,28 +195,38 @@ with m3:
     st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK ---
+# --- 8. GRAFIK (UKURAN DIKECILKAN 50%) ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
+    
+    # Tinggi diatur 225px (50% dari sebelumnya 450px)
+    chart_height = 225 
+
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_counts = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5)])
-        fig1.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        # Label BOLD dan format Nama + Persentase
+        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=12, family="Arial Black", color="white"))
+        fig1.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
         fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5)])
-        fig2.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        # Label BOLD dan format Nama + Persentase
+        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=12, family="Arial Black", color="white"))
+        fig2.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = go.Figure(go.Bar(x=unit_data['Unit no'], y=unit_data['count']))
-        fig3.update_layout(height=450, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
+        fig3.update_layout(height=chart_height, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
