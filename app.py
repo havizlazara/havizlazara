@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Header kini menampilkan warna asli gambar BG2.jpg dengan posisi fit.")
+    st.info("Teks grafik kini berwarna putih, bold, dan Bar Chart menampilkan jumlah item.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS (ORIGINAL COLOR & FIT HEADER) ---
+# --- 3. CUSTOM CSS ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; }}
@@ -43,7 +43,6 @@ st.markdown(f"""
     
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
 
-    /* HEADER STYLING - ORIGINAL COLOR & FIT */
     .custom-header {{
         position: relative;
         width: 100%;
@@ -56,19 +55,17 @@ st.markdown(f"""
         align-items: center;
         text-align: center;
         margin-bottom: 30px;
-        /* Menggunakan warna asli tanpa overlay biru muda */
         background-image: url("data:image/jpeg;base64,{header_bg_base64}");
-        background-size: cover; /* Fit ke layar */
+        background-size: cover;
         background-position: center;
         border: 2px solid #1f4e79;
     }}
 
-    /* Overlay dihapus/dibuat transparan agar warna asli keluar */
     .custom-header::after {{
         content: "";
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0, 0, 0, 0.1); /* Overlay sangat tipis hanya agar teks putih terbaca */
+        background: rgba(0, 0, 0, 0.1); 
         z-index: 1;
     }}
 
@@ -92,7 +89,7 @@ st.markdown(f"""
     
     .logo-img-header {{ 
         height: 110px; width: auto; margin-bottom: 20px; 
-        mix-blend-mode: multiply; /* Menghilangkan background putih logo */
+        mix-blend-mode: multiply;
     }}
 
     .metric-card {{
@@ -116,7 +113,6 @@ st.markdown(f"""
         .giant-title {{ font-size: 28px; }}
         .giant-sub {{ font-size: 16px; }}
         .logo-img-header {{ height: 80px; }}
-        .main .block-container {{ padding: 1rem; }}
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -188,32 +184,42 @@ with m3:
     st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><b>COMPLETE</b><h2>{complete}</h2></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (UKURAN 50%) ---
+# --- 8. GRAFIK (FONT PUTIH & BOLD) ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
     chart_h = 225 
+    font_style = dict(size=12, family="Arial Black", color="white")
+
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_c = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_c.index, values=pic_c.values, hole=.5)])
-        fig1.update_traces(textinfo='label+percent', textfont=dict(size=11, family="Arial Black"))
+        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=font_style)
         fig1.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_c = df_display['Status'].value_counts()
         colors = ['#ef4444' if s == 'Outstanding' else '#22c55e' for s in st_c.index]
         fig2 = go.Figure(data=[go.Pie(labels=st_c.index, values=st_c.values, hole=.5, marker=dict(colors=colors))])
-        fig2.update_traces(textinfo='label+percent', textfont=dict(size=11, family="Arial Black"))
+        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=font_style)
         fig2.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_d = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(unit_d, x='Unit no', y='count', color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_layout(height=chart_h, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
+        # Menampilkan jumlah item langsung di dalam batang bar
+        fig3 = px.bar(unit_d, x='Unit no', y='count', color='Unit no', 
+                     text='count', # Menampilkan angka jumlah item
+                     color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3.update_traces(textposition='inside', textfont=font_style) # Font putih & bold di dalam bar
+        fig3.update_layout(height=chart_h, showlegend=False, yaxis_visible=False, 
+                          paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0),
+                          xaxis=dict(tickfont=dict(color="#1f4e79", family="Arial Black")))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -225,10 +231,8 @@ edited_display = st.data_editor(df_to_edit, use_container_width=True, height=500
 
 # --- 10. ACTIONS ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
-
 if col_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
-        # Gabungkan data yang tidak difilter dengan data hasil edit
         not_visible = df_master[~df_master.index.isin(df_display.index)]
         new_edited = edited_display.reset_index(drop=True)
         final_save = pd.concat([not_visible, new_edited], ignore_index=True)
