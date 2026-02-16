@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Logika Simpan diperbaiki: Hanya memperbarui baris yang berubah tanpa menghapus data lainnya.")
+    st.info("Header kini menampilkan warna asli gambar BG2.jpg dengan posisi fit.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -28,54 +28,96 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS ---
+# --- 3. CUSTOM CSS (ORIGINAL COLOR & FIT HEADER) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; }}
     .main .block-container {{
-        background-color: {card_color}; padding: 2rem 3rem; max-width: 98%;
-        margin: auto; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        background-color: {card_color}; 
+        padding: 2rem 3rem; 
+        max-width: 98%;
+        margin: auto;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }}
+    
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@700&display=swap');
+
+    /* HEADER STYLING - ORIGINAL COLOR & FIT */
     .custom-header {{
-        position: relative; width: 100%; padding: 65px 20px; border-radius: 15px;
-        overflow: hidden; display: flex; flex-direction: column; align-items: center;
-        text-align: center; margin-bottom: 30px;
+        position: relative;
+        width: 100%;
+        min-height: 250px;
+        padding: 40px 20px;
+        border-radius: 15px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        margin-bottom: 30px;
+        /* Menggunakan warna asli tanpa overlay biru muda */
         background-image: url("data:image/jpeg;base64,{header_bg_base64}");
-        background-size: cover; background-position: center; border: 2px solid #1f4e79;
+        background-size: cover; /* Fit ke layar */
+        background-position: center;
+        border: 2px solid #1f4e79;
     }}
+
+    /* Overlay dihapus/dibuat transparan agar warna asli keluar */
     .custom-header::after {{
-        content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(173, 216, 230, 0.4); z-index: 1;
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.1); /* Overlay sangat tipis hanya agar teks putih terbaca */
+        z-index: 1;
     }}
+
     .header-content {{ position: relative; z-index: 2; }}
+
     .giant-title {{ 
-        font-family: 'Libre Baskerville', serif; font-size: 58px; font-weight: 900; 
-        color: #ffffff !important; margin: 0; line-height: 1.2; 
-        background: rgba(31, 78, 121, 0.6); padding: 5px 25px; border-radius: 10px; 
-        display: inline-block; text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+        font-family: 'Libre Baskerville', serif;
+        font-size: 58px; font-weight: 900; color: #ffffff !important; 
+        margin: 0; line-height: 1.2; background: rgba(31, 78, 121, 0.7); 
+        padding: 10px 30px; border-radius: 10px; display: inline-block;
+        text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
     }}
+    
     .giant-sub {{ 
-        font-family: 'Bebas Neue', cursive; font-size: 30px; color: #ffffff !important; 
+        font-family: 'Bebas Neue', cursive; 
+        font-size: 30px; color: #ffffff !important; 
         margin: 15px 0 0 0; font-weight: 400; letter-spacing: 5px;
-        background: rgba(31, 78, 121, 0.6); padding: 2px 20px; border-radius: 8px; display: inline-block;
+        background: rgba(31, 78, 121, 0.7); padding: 5px 20px;
+        border-radius: 8px; display: inline-block;
     }}
-    .logo-img-header {{ height: 115px; width: auto; margin-bottom: 25px; mix-blend-mode: multiply; filter: contrast(110%); }}
+    
+    .logo-img-header {{ 
+        height: 110px; width: auto; margin-bottom: 20px; 
+        mix-blend-mode: multiply; /* Menghilangkan background putih logo */
+    }}
+
     .metric-card {{
         background: {card_color}; border-radius: 10px; padding: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;
         text-align: center; border-bottom: 5px solid #1f4e79; margin-bottom: 10px;
     }}
+
     .title-box {{
-        background: white; padding: 10px; border-radius: 5px; border: 1px solid #e2e8f0; 
-        text-align: center; font-weight: bold; color: #1f4e79; margin-bottom: 15px;
+        background: white; padding: 10px; border-radius: 5px; 
+        border: 1px solid #e2e8f0; text-align: center; 
+        font-weight: bold; color: #1f4e79; margin-bottom: 15px;
     }}
+
     .chart-box {{
-        background-color: {card_color}; border: 2px solid #e2e8f0; border-radius: 15px; 
-        padding: 15px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        background-color: {card_color}; border: 2px solid #e2e8f0;
+        border-radius: 15px; padding: 15px; margin-bottom: 20px;
     }}
-    .stDownloadButton>button {{ width: 100%; background-color: #1f4e79; color: white; border-radius: 5px; font-weight: bold; }}
-    @media (max-width: 768px) {{ .giant-title {{ font-size: 28px; }} .giant-sub {{ font-size: 16px; }} .logo-img-header {{ height: 80px; }} }}
+
+    @media (max-width: 768px) {{
+        .giant-title {{ font-size: 28px; }}
+        .giant-sub {{ font-size: 16px; }}
+        .logo-img-header {{ height: 80px; }}
+        .main .block-container {{ padding: 1rem; }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -87,7 +129,6 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status'])
-    # Pastikan data memiliki Doc Date dalam format yang benar
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
@@ -138,51 +179,47 @@ complete = len(df_display[df_display['Status'] == 'Complete'])
 
 m1, m2, m3 = st.columns(3)
 with m1:
-    st.markdown(f'<div class="metric-card"><p style="font-size:14px; font-weight:bold; margin:0;">TOTAL ITEMS</p><p style="font-size:36px; font-weight:800; color:#1f4e79; margin:0;">{total}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{total}</h2></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">PIC</div>', unsafe_allow_html=True)
 with m2:
-    st.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><p style="font-size:14px; font-weight:bold; margin:0;">OUTSTANDING</p><p style="font-size:36px; font-weight:800; color:#ef4444; margin:0;">{outstanding}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><b>OUTSTANDING</b><h2>{outstanding}</h2></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">STATUS</div>', unsafe_allow_html=True)
 with m3:
-    st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><b>COMPLETE</b><h2>{complete}</h2></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK ---
+# --- 8. GRAFIK (UKURAN 50%) ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
-    chart_height = 225 
+    chart_h = 225 
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        pic_counts = df_display['PIC'].value_counts()
-        fig1 = go.Figure(data=[go.Pie(labels=pic_counts.index, values=pic_counts.values, hole=.5)])
-        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=11, family="Arial Black", color="white"))
-        fig1.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        pic_c = df_display['PIC'].value_counts()
+        fig1 = go.Figure(data=[go.Pie(labels=pic_c.index, values=pic_c.values, hole=.5)])
+        fig1.update_traces(textinfo='label+percent', textfont=dict(size=11, family="Arial Black"))
+        fig1.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        st_counts = df_display['Status'].value_counts()
-        status_colors = {'Outstanding': '#ef4444', 'Complete': '#22c55e', 'On Process': '#3b82f6'}
-        colors = [status_colors.get(s, '#94a3b8') for s in st_counts.index]
-        fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5, marker=dict(colors=colors))])
-        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=11, family="Arial Black", color="white"))
-        fig2.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
+        st_c = df_display['Status'].value_counts()
+        colors = ['#ef4444' if s == 'Outstanding' else '#22c55e' for s in st_c.index]
+        fig2 = go.Figure(data=[go.Pie(labels=st_c.index, values=st_c.values, hole=.5, marker=dict(colors=colors))])
+        fig2.update_traces(textinfo='label+percent', textfont=dict(size=11, family="Arial Black"))
+        fig2.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(unit_data, x='Unit no', y='count', color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_layout(height=chart_height, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
-        fig3.update_traces(texttemplate='%{y}', textposition='inside', textfont=dict(family="Arial Black"))
+        unit_d = df_display['Unit no'].value_counts().nlargest(5).reset_index()
+        fig3 = px.bar(unit_d, x='Unit no', y='count', color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3.update_layout(height=chart_h, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 9. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
-# Simpan indeks asli untuk keperluan penggabungan data nanti
 df_to_edit = df_display.copy()
-# Tampilan nomor urut dari 1 (hanya visual)
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 edited_display = st.data_editor(df_to_edit, use_container_width=True, height=500, num_rows="dynamic")
 
@@ -191,32 +228,19 @@ col_save, col_export, _ = st.columns([1.5, 1.5, 4])
 
 if col_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
-        # LOGIKA PERBAIKAN:
-        # 1. Ambil data asli yang tidak sedang ditampilkan (tidak terfilter)
-        df_not_visible = df_master[~df_master.index.isin(df_display.index)]
-        
-        # 2. Ambil data hasil editan dan kembalikan struktur kolomnya
-        df_new_edited = edited_display.reset_index(drop=True)
-        
-        # 3. Gabungkan: Data yang tidak difilter + Data hasil edit/tambah
-        df_final_to_save = pd.concat([df_not_visible, df_new_edited], ignore_index=True)
-        
-        # 4. Update ke Google Sheets
-        conn.update(data=df_final_to_save)
-        
+        # Gabungkan data yang tidak difilter dengan data hasil edit
+        not_visible = df_master[~df_master.index.isin(df_display.index)]
+        new_edited = edited_display.reset_index(drop=True)
+        final_save = pd.concat([not_visible, new_edited], ignore_index=True)
+        conn.update(data=final_save)
         st.cache_data.clear()
-        st.success("Sinkronisasi Berhasil!")
+        st.success("Tersimpan!")
         st.rerun()
-    except Exception as e:
-        st.error(f"Gagal: {e}")
+    except Exception as e: st.error(f"Gagal: {e}")
 
-# Export Excel tetap menggunakan hasil filter
-excel_buffer = io.BytesIO()
-with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-    df_display.to_excel(writer, index=False, sheet_name='Monitoring_PO')
-    writer.close()
-
-col_export.download_button(label="📊 EXPORT TO EXCEL", data=excel_buffer.getvalue(), 
-                           file_name="PO_NHM_Export.xlsx", mime="application/vnd.ms-excel")
+excel_buf = io.BytesIO()
+with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+    df_display.to_excel(writer, index=False)
+col_export.download_button(label="📊 EXPORT EXCEL", data=excel_buf.getvalue(), file_name="PO_Monitoring.xlsx")
 
 st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px;'>PT Nusa Halmahera Minerals | 2026</div>", unsafe_allow_html=True)
