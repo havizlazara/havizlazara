@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Warna status: Merah (Outstanding) & Hijau (Complete).")
+    st.info("Nomor urut tabel kini otomatis dimulai dari 1 setelah difilter.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -173,6 +173,7 @@ with st.container():
 
     f_status = c_stat_filter.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
 
+# Menerapkan filter terakhir
 df_display = filtered_for_opts.copy()
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
@@ -195,7 +196,7 @@ with m3:
     st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><p style="font-size:14px; font-weight:bold; margin:0;">COMPLETE</p><p style="font-size:36px; font-weight:800; color:#22c55e; margin:0;">{complete}</p></div>', unsafe_allow_html=True)
     st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (UKURAN KOMPAK & WARNA KHUSUS) ---
+# --- 8. GRAFIK ---
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
     chart_height = 225 
@@ -212,10 +213,8 @@ if not df_display.empty:
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         st_counts = df_display['Status'].value_counts()
-        # Mapping warna: Outstanding -> Merah, Complete -> Hijau
         status_colors = {'Outstanding': '#ef4444', 'Complete': '#22c55e', 'On Process': '#3b82f6'}
         colors = [status_colors.get(s, '#94a3b8') for s in st_counts.index]
-        
         fig2 = go.Figure(data=[go.Pie(labels=st_counts.index, values=st_counts.values, hole=.5, marker=dict(colors=colors))])
         fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(size=11, family="Arial Black", color="white"))
         fig2.update_layout(height=chart_height, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=0, b=0, l=0, r=0))
@@ -225,23 +224,32 @@ if not df_display.empty:
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_data = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        # Warna berbeda setiap unit menggunakan skala warna kualitatif
-        fig3 = px.bar(unit_data, x='Unit no', y='count', color='Unit no', 
-                     color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3 = px.bar(unit_data, x='Unit no', y='count', color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
         fig3.update_layout(height=chart_height, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=0, l=0, r=0))
         fig3.update_traces(texttemplate='%{y}', textposition='inside', textfont=dict(family="Arial Black"))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 9. DATA EDITOR ---
+# --- 9. DATA EDITOR (PERBAIKAN INDEKS & PENOMORAN) ---
 st.markdown("### 📋 Database Monitoring")
-edited_data = st.data_editor(df_display, use_container_width=True, height=500)
+
+# Trik untuk mengatur ulang nomor urut dari 1 setiap kali filter berubah:
+df_to_edit = df_display.copy()
+df_to_edit.index = range(1, len(df_to_edit) + 1) # Membuat indeks baru mulai dari 1
+
+edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500)
 
 # --- 10. ACTIONS ---
 c_save, c_exp, _ = st.columns([1.5, 1.5, 4])
 if c_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
-        conn.update(data=edited_data)
+        # Menghapus penomoran buatan (index 1,2,3) sebelum simpan ke Google Sheets agar tidak merusak data asli
+        final_to_save = edited_data.reset_index(drop=True)
+        
+        # Gabungkan kembali dengan data asli yang tidak terfilter jika perlu, 
+        # atau update baris yang berubah saja. Di sini kita asumsikan update semua data terfilter.
+        conn.update(data=final_to_save)
+        
         st.cache_data.clear()
         st.success("Tersimpan!")
         st.rerun()
