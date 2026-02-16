@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Nomor urut tabel kini otomatis dimulai dari 1 setelah difilter.")
+    st.info("Fitur Export Excel kini tersedia di bawah tombol simpan.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -110,6 +110,15 @@ st.markdown(f"""
         box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }}
 
+    /* CSS Button agar serasi */
+    .stDownloadButton>button {{
+        width: 100%;
+        background-color: #1f4e79;
+        color: white;
+        border-radius: 5px;
+        font-weight: bold;
+    }}
+
     @media (max-width: 768px) {{
         .giant-title {{ font-size: 28px; padding: 10px; }}
         .giant-sub {{ font-size: 16px; letter-spacing: 2px; }}
@@ -173,7 +182,6 @@ with st.container():
 
     f_status = c_stat_filter.multiselect("Filter Status", options=get_dynamic_opts(filtered_for_opts, "Status"))
 
-# Menerapkan filter terakhir
 df_display = filtered_for_opts.copy()
 if f_status: df_display = df_display[df_display["Status"].isin(f_status)]
 if search_query:
@@ -230,29 +238,38 @@ if not df_display.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 9. DATA EDITOR (PERBAIKAN INDEKS & PENOMORAN) ---
+# --- 9. DATA EDITOR (NOMOR URUT MULAI DARI 1) ---
 st.markdown("### 📋 Database Monitoring")
-
-# Trik untuk mengatur ulang nomor urut dari 1 setiap kali filter berubah:
 df_to_edit = df_display.copy()
-df_to_edit.index = range(1, len(df_to_edit) + 1) # Membuat indeks baru mulai dari 1
-
+df_to_edit.index = range(1, len(df_to_edit) + 1)
 edited_data = st.data_editor(df_to_edit, use_container_width=True, height=500)
 
-# --- 10. ACTIONS ---
-c_save, c_exp, _ = st.columns([1.5, 1.5, 4])
-if c_save.button("💾 SIMPAN & SYNC CLOUD"):
+# --- 10. ACTIONS (SAVE & EXPORT) ---
+col_save, col_export, _ = st.columns([1.5, 1.5, 4])
+
+# Tombol Simpan
+if col_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
-        # Menghapus penomoran buatan (index 1,2,3) sebelum simpan ke Google Sheets agar tidak merusak data asli
         final_to_save = edited_data.reset_index(drop=True)
-        
-        # Gabungkan kembali dengan data asli yang tidak terfilter jika perlu, 
-        # atau update baris yang berubah saja. Di sini kita asumsikan update semua data terfilter.
         conn.update(data=final_to_save)
-        
         st.cache_data.clear()
         st.success("Tersimpan!")
         st.rerun()
-    except Exception as e: st.error(f"Gagal: {e}")
+    except Exception as e:
+        st.error(f"Gagal Simpan: {e}")
+
+# Tombol Export Excel (Menyesuaikan Filter)
+excel_buffer = io.BytesIO()
+with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+    # Mengambil df_display (yang sudah terfilter) untuk diekspor
+    df_display.to_excel(writer, index=False, sheet_name='PO_NHM_Data')
+    writer.close()
+
+col_export.download_button(
+    label="📊 EXPORT TO EXCEL",
+    data=excel_buffer.getvalue(),
+    file_name="Monitoring_PO_NHM.xlsx",
+    mime="application/vnd.ms-excel"
+)
 
 st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px;'>PT Nusa Halmahera Minerals | 2026</div>", unsafe_allow_html=True)
