@@ -16,7 +16,7 @@ with st.sidebar:
     bg_color = st.color_picker("Pilih Warna Background Utama", "#f1f5f9")
     card_color = st.color_picker("Pilih Warna Card", "#ffffff")
     st.divider()
-    st.info("Teks grafik kini berwarna putih, bold, dan Bar Chart menampilkan jumlah item.")
+    st.info("Kolom Resv, Material, & PO No kini bisa diinput manual sebagai teks.")
 
 # --- 2. FUNGSI ENKODE GAMBAR ---
 def get_base64_image(image_path):
@@ -28,7 +28,7 @@ def get_base64_image(image_path):
 header_bg_base64 = get_base64_image("BG2.jpg")
 logo_base64 = get_base64_image("NHM.jpg")
 
-# --- 3. CUSTOM CSS ---
+# --- 3. CUSTOM CSS (ORIGINAL COLOR & FIT HEADER) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; }}
@@ -113,6 +113,7 @@ st.markdown(f"""
         .giant-title {{ font-size: 28px; }}
         .giant-sub {{ font-size: 16px; }}
         .logo-img-header {{ height: 80px; }}
+        .main .block-container {{ padding: 1rem; }}
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -124,7 +125,17 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status'])
+        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Resv', 'Material', 'PO No'])
+    
+    # PERBAIKAN: Mengubah kolom angka menjadi string agar bisa diinput manual tanpa error
+    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status']
+    for col in text_cols:
+        if col in data.columns:
+            # Mengisi NaN dengan string kosong dan memaksa tipe data objek/string
+            data[col] = data[col].fillna("").astype(str)
+            # Menghapus akhiran '.0' jika tidak sengaja terbaca sebagai float
+            data[col] = data[col].str.replace(r'\.0$', '', regex=True)
+            
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
@@ -188,13 +199,13 @@ with m3:
 if not df_display.empty:
     g1, g2, g3 = st.columns(3)
     chart_h = 225 
-    font_style = dict(size=12, family="Arial Black", color="white")
+    f_style = dict(size=12, family="Arial Black", color="white")
 
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pic_c = df_display['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pic_c.index, values=pic_c.values, hole=.5)])
-        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=font_style)
+        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=f_style)
         fig1.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -204,7 +215,7 @@ if not df_display.empty:
         st_c = df_display['Status'].value_counts()
         colors = ['#ef4444' if s == 'Outstanding' else '#22c55e' for s in st_c.index]
         fig2 = go.Figure(data=[go.Pie(labels=st_c.index, values=st_c.values, hole=.5, marker=dict(colors=colors))])
-        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=font_style)
+        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=f_style)
         fig2.update_layout(height=chart_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -212,33 +223,32 @@ if not df_display.empty:
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         unit_d = df_display['Unit no'].value_counts().nlargest(5).reset_index()
-        # Menampilkan jumlah item langsung di dalam batang bar
-        fig3 = px.bar(unit_d, x='Unit no', y='count', color='Unit no', 
-                     text='count', # Menampilkan angka jumlah item
-                     color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_traces(textposition='inside', textfont=font_style) # Font putih & bold di dalam bar
-        fig3.update_layout(height=chart_h, showlegend=False, yaxis_visible=False, 
-                          paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0),
-                          xaxis=dict(tickfont=dict(color="#1f4e79", family="Arial Black")))
+        fig3 = px.bar(unit_d, x='Unit no', y='count', color='Unit no', text='count', color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3.update_traces(textposition='inside', textfont=f_style) 
+        fig3.update_layout(height=chart_h, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 9. DATA EDITOR ---
 st.markdown("### 📋 Database Monitoring")
 df_to_edit = df_display.copy()
+# Reset nomor urut tampilan
 df_to_edit.index = range(1, len(df_to_edit) + 1)
 edited_display = st.data_editor(df_to_edit, use_container_width=True, height=500, num_rows="dynamic")
 
 # --- 10. ACTIONS ---
 col_save, col_export, _ = st.columns([1.5, 1.5, 4])
+
 if col_save.button("💾 SIMPAN & SYNC CLOUD"):
     try:
+        # Logika Merge: Data tidak terfilter + Data baru yang diedit
         not_visible = df_master[~df_master.index.isin(df_display.index)]
         new_edited = edited_display.reset_index(drop=True)
         final_save = pd.concat([not_visible, new_edited], ignore_index=True)
+        
         conn.update(data=final_save)
         st.cache_data.clear()
-        st.success("Tersimpan!")
+        st.success("Sinkronisasi Berhasil!")
         st.rerun()
     except Exception as e: st.error(f"Gagal: {e}")
 
