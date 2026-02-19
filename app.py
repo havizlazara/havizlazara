@@ -62,7 +62,7 @@ with st.sidebar:
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. CSS & ENKODE GAMBAR HEADER ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -91,7 +91,6 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. RENDER HEADER ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
@@ -102,7 +101,7 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 6. FILTER SECTION ---
+# --- 5. FILTER SECTION ---
 search_q = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
 c1, c2, c3, c4 = st.columns(4)
 
@@ -119,37 +118,41 @@ if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 if search_q:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 7. GRAFIK (FORMAT SEBELUMNYA) ---
+# --- 6. GRAFIK (FONT PUTIH DI DALAM) ---
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
+    # Konfigurasi Font Putih Bold
+    font_style = dict(family="Arial Black", size=14, color="white")
+    
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        # Pie Chart PIC dengan label Nama di Dalam
         fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
-        fig1.update_traces(textposition='inside', textinfo='percent+label')
+        fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
         fig1.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        # Pie Chart Status dengan label Nama di Dalam
         fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="Monitoring by Status",
                       color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-        fig2.update_traces(textposition='inside', textinfo='percent+label')
+        fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
         fig2.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        # Bar Chart Unit dengan Warna Berbeda (Color-coded by Unit)
         ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", 
                       color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
+        # Untuk bar chart, teks diletakkan di dalam bar dengan warna putih
+        fig3.update_traces(texttemplate='%{y}', textposition='inside', textfont=font_style)
         fig3.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False, yaxis_visible=False)
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE DENGAN HIGHLIGHT MERAH FULL ROW ---
+# --- 7. DATABASE DENGAN HIGHLIGHT MERAH FULL ROW ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
@@ -158,7 +161,6 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # FUNGSI HIGHLIGHT: Warna merah memanjang ke seluruh kolom
     def style_row_red(row):
         style = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
         return [style] * len(row) if row['Pilih'] else [''] * len(row)
@@ -168,7 +170,7 @@ if st.session_state['authenticated']:
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_nhm_final_fixed"
+        key="editor_nhm_white_font"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -195,7 +197,7 @@ if st.session_state['authenticated']:
             st.session_state.target_indices = selected_indices
             st.rerun()
 
-    if a4.button("💾 SIMPAN KE GSHEETS", type="primary", use_container_width=True):
+    if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
@@ -203,9 +205,8 @@ if st.session_state['authenticated']:
             st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # PILIHAN LOKASI
     if st.session_state.show_complete_options:
-        st.warning("📍 Update Lokasi Penerimaan:")
+        st.warning("📍 Pilih Lokasi Penerimaan:")
         c_opt1, c_opt2, c_opt3 = st.columns([1, 1, 2])
         if c_opt1.button("📦 Bitung", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
@@ -223,7 +224,7 @@ if st.session_state['authenticated']:
 else:
     st.dataframe(df_filtered, use_container_width=True, hide_index=True)
 
-# --- 9. EXPORT ---
+# --- 8. EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.to_excel(wr, index=False)
