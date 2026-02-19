@@ -17,24 +17,18 @@ if 'authenticated' not in st.session_state:
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
-        admin_password = st.text_input("Masukkan Password Admin:", type="password")
+        admin_password = st.text_input("Password:", type="password")
         if st.button("Login"):
             if admin_password == "nhm123":
                 st.session_state['authenticated'] = True
                 st.rerun()
-            else:
-                st.error("Password Salah")
+            else: st.error("Salah")
     else:
-        st.success("Mode Admin: Aktif")
         if st.button("Logout"):
             st.session_state['authenticated'] = False
             st.rerun()
-    st.divider()
-    st.header("🎨 Tampilan")
-    bg_color = st.color_picker("Warna Background", "#f1f5f9")
-    card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 2. FUNGSI DATA ---
+# --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
@@ -42,95 +36,84 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Resv', 'Material', 'PO No'])
-    
-    # Pastikan tipe data konsisten
     text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
     return data
 
-# Muat data awal ke session state agar bisa dimanipulasi tombol
+# Inisialisasi Master Data di Session State
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- 3. CUSTOM CSS ---
-st.markdown(f"""
-    <style>
-    .stApp {{ background-color: {bg_color}; }}
-    .main .block-container {{ background-color: {card_color}; padding: 2rem; border-radius: 12px; }}
-    .giant-title {{ font-family: 'serif'; font-size: 40px; font-weight: bold; color: #1f4e79; text-align: center; }}
-    </style>
-    """, unsafe_allow_html=True)
-
-st.markdown('<h1 class="giant-title">Purchase Order Monitoring NHM</h1>', unsafe_allow_html=True)
-
-# --- 4. FILTER ---
-search_query = st.text_input("🔎 Cari Data:", placeholder="Ketik nomor PO atau PIC...")
+# --- 3. FILTER ---
+st.markdown("### 🔍 Filter Monitoring")
+search_query = st.text_input("Cari Global:", placeholder="Ketik sesuatu...")
 df_filtered = st.session_state.df_master.copy()
 
 if search_query:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 5. DATABASE DENGAN SELECTION ---
+# --- 4. DATABASE MONITORING ---
+st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
-    st.info("💡 Centang baris di sebelah kiri, lalu klik tombol aksi untuk merubah status.")
+    st.info("💡 Klik kolom 'Status' untuk mengubah secara manual, atau gunakan tombol di bawah.")
     
-    # Gunakan dataframe dengan mode seleksi baris
-    selection = st.dataframe(
-        df_filtered,
+    # MENGGUNAKAN DATA EDITOR (Lebih Kompatibel)
+    # Kita tambahkan kolom checkbox buatan (Pilih)
+    if 'temp_df' not in st.session_state or st.sidebar.button("Reset Pilihan"):
+        df_filtered['Pilih'] = False
+        st.session_state.temp_df = df_filtered
+
+    # Tampilkan Editor
+    edited_df = st.data_editor(
+        st.session_state.temp_df,
         use_container_width=True,
-        hide_index=False,
-        on_select="rerun",
-        selection_mode="multi_row"
+        hide_index=True,
+        column_config={
+            "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Outstanding", "Partial", "Complete"])
+        },
+        key="main_editor"
     )
 
-    # Ambil indeks baris yang dicentang
-    selected_rows = selection.selection.rows
+    # Tombol Aksi Massal
+    c1, c2, c3, _ = st.columns([1,1,1,3])
     
-    # Tombol Action
-    btn_out, btn_part, btn_comp, _ = st.columns([1, 1, 1, 3])
-    
-    if selected_rows:
-        if btn_out.button("🔴 Outstanding", use_container_width=True):
-            for row_idx in selected_rows:
-                # Ambil nilai asli (karena index di filtered bisa berbeda dengan master)
-                actual_idx = df_filtered.index[row_idx]
-                st.session_state.df_master.at[actual_idx, 'Status'] = "Outstanding"
-            st.success(f"{len(selected_rows)} baris diubah ke Outstanding")
-            st.rerun()
+    # Cek baris mana yang dicentang di kolom 'Pilih'
+    rows_to_update = edited_df[edited_df['Pilih'] == True].index
 
-        if btn_part.button("🟡 Partial", use_container_width=True):
-            for row_idx in selected_rows:
-                actual_idx = df_filtered.index[row_idx]
-                st.session_state.df_master.at[actual_idx, 'Status'] = "Partial"
-            st.success(f"{len(selected_rows)} baris diubah ke Partial")
-            st.rerun()
-
-        if btn_comp.button("🟢 Complete", use_container_width=True):
-            for row_idx in selected_rows:
-                actual_idx = df_filtered.index[row_idx]
-                st.session_state.df_master.at[actual_idx, 'Status'] = "Complete"
-            st.success(f"{len(selected_rows)} baris diubah ke Complete")
-            st.rerun()
-
-    # Tombol Sync ke Google Sheets
-    st.divider()
-    if st.button("💾 SIMPAN SEMUA PERUBAHAN KE CLOUD", type="primary"):
-        try:
-            conn.update(data=st.session_state.df_master)
+    if not rows_to_update.empty:
+        if c1.button("🔴 Outstanding All"):
+            st.session_state.df_master.loc[rows_to_update, 'Status'] = "Outstanding"
             st.cache_data.clear()
-            st.success("Data di Google Sheets Berhasil Diperbarui!")
-        except Exception as e:
-            st.error(f"Gagal Simpan: {e}")
-else:
-    # Tampilan untuk Viewer
-    st.dataframe(df_filtered, use_container_width=True)
+            st.rerun()
+        if c2.button("🟡 Partial All"):
+            st.session_state.df_master.loc[rows_to_update, 'Status'] = "Partial"
+            st.cache_data.clear()
+            st.rerun()
+        if c3.button("🟢 Complete All"):
+            st.session_state.df_master.loc[rows_to_update, 'Status'] = "Complete"
+            st.cache_data.clear()
+            st.rerun()
 
-# --- 6. EXPORT ---
+    # Simpan Cloud
+    st.divider()
+    if st.button("💾 SIMPAN SEMUA KE GOOGLE SHEETS", type="primary"):
+        try:
+            # Hapus kolom 'Pilih' sebelum simpan
+            data_to_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
+            conn.update(data=data_to_save)
+            st.success("Tersimpan di Cloud!")
+            st.cache_data.clear()
+        except Exception as e: st.error(f"Gagal: {e}")
+else:
+    st.dataframe(df_filtered.drop(columns=['Pilih'], errors='ignore'), use_container_width=True)
+
+# --- 5. EXPORT ---
 excel_buf = io.BytesIO()
 with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as wr:
-    df_filtered.to_excel(wr, index=False)
-st.download_button("📊 EXPORT EXCEL", data=excel_buf.getvalue(), file_name="Monitoring_PO.xlsx")
+    df_filtered.drop(columns=['Pilih'], errors='ignore').to_excel(wr, index=False)
+st.download_button("📊 EXPORT EXCEL", data=excel_buf.getvalue(), file_name="PO_Monitoring.xlsx")
