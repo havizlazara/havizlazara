@@ -17,7 +17,7 @@ if 'show_complete_options' not in st.session_state:
 if 'selected_rows_indices' not in st.session_state:
     st.session_state['selected_rows_indices'] = []
 
-# --- 2. KONEKSI DATA ---
+# --- 2. KONEKSI DATA & PEMBERSIHAN KOLOM ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
@@ -26,16 +26,18 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
-    # --- PROSES PEMBERSIHAN KOLOM GANDA ---
-    # Menghapus kolom duplikat jika ada (mengambil yang pertama saja)
+    # --- LOGIKA ANTI-DUPLIKAT ---
+    # 1. Hapus spasi di awal/akhir nama kolom
+    data.columns = data.columns.str.strip()
+    # 2. Hapus kolom yang namanya duplikat (ambil yang pertama saja)
     data = data.loc[:, ~data.columns.duplicated()]
     
-    # Pastikan kolom Update status ada dan hanya satu
+    # Pastikan kolom Update status ada
     if 'Update status' not in data.columns:
         data['Update status'] = ""
     
-    # Daftar kolom teks yang diproses (Pastikan Update status masuk daftar ini)
-    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'Short Text', 'Supplier']
+    # Daftar kolom teks yang diproses
+    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
@@ -44,7 +46,6 @@ def load_data():
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
 
-# Inisialisasi Master Data
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -160,7 +161,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 7. DATABASE & ACTION BUTTONS ---
+# --- 7. DATABASE & TOMBOL ACTION ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
@@ -168,7 +169,7 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # Paksa hanya ada satu kolom 'Update status' di tampilan editor
+    # Memastikan tidak ada kolom duplikat sebelum ditampilkan di editor
     df_editor = df_editor.loc[:, ~df_editor.columns.duplicated()]
 
     edited_df = st.data_editor(
@@ -176,7 +177,7 @@ if st.session_state['authenticated']:
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_pro_final"
+        key="editor_pro_v2"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -204,19 +205,18 @@ if st.session_state['authenticated']:
             st.session_state.selected_rows_indices = selected_indices
             st.rerun()
 
-    if a4.button("💾 SIMPAN SEMUA KE GOOGLE SHEETS", type="primary", use_container_width=True):
+    if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            # Final check: hapus duplikat kolom sebelum upload
-            save_data = save_data.loc[:, ~save_data.columns.duplicated()]
+            save_data = save_data.loc[:, ~save_data.columns.duplicated()] # Final duplicate check
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Sinkronisasi Berhasil!")
+            st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # --- PILIHAN SETELAH KLIK COMPLETE ---
+    # LOGIKA COMPLETE (HANYA MENGISI SATU KOLOM)
     if st.session_state.show_complete_options:
-        st.info(f"📍 Update Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris:")
+        st.info(f"📍 Pilih Lokasi untuk {len(st.session_state.selected_rows_indices)} baris:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
@@ -241,6 +241,4 @@ else:
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.loc[:, ~df_filtered.columns.duplicated()].to_excel(wr, index=False)
-st.download_button("📊 EXPORT EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
-
-st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px;'>PT Nusa Halmahera Minerals | 2026</div>", unsafe_allow_html=True)
+st.download_button("📊 EXCEL EXPORT", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
