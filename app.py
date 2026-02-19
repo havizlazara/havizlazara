@@ -26,11 +26,15 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
-    # KUNCI: Pastikan hanya ada satu kolom Update status
+    # --- PROSES PEMBERSIHAN KOLOM GANDA ---
+    # Menghapus kolom duplikat jika ada (mengambil yang pertama saja)
+    data = data.loc[:, ~data.columns.duplicated()]
+    
+    # Pastikan kolom Update status ada dan hanya satu
     if 'Update status' not in data.columns:
         data['Update status'] = ""
-        
-    # Daftar kolom teks yang diizinkan (Hanya satu kolom Update status di sini)
+    
+    # Daftar kolom teks yang diproses (Pastikan Update status masuk daftar ini)
     text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'Short Text', 'Supplier']
     for col in text_cols:
         if col in data.columns:
@@ -40,6 +44,7 @@ def load_data():
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
 
+# Inisialisasi Master Data
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -62,7 +67,7 @@ with st.sidebar:
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. CSS & HEADER GAMBAR ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -95,9 +100,6 @@ st.markdown(f"""
     }}
     .chart-box {{ background-color: {card_color}; border: 2px solid #e2e8f0; border-radius: 15px; padding: 10px; }}
     </style>
-    """, unsafe_allow_html=True)
-
-st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
             <img src="data:image/jpeg;base64,{logo_img}" style="height:100px; mix-blend-mode:multiply;">
@@ -124,9 +126,9 @@ if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 if search_q:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 6. SUMMARY CARDS & 7. GRAFIK ---
+# --- 6. SUMMARY & CHART ---
 m1, m2, m3 = st.columns(3)
-with m1: st.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_filtered)}</h2></div>', unsafe_allow_html=True)
+with m1: st.markdown(f'<div class="metric-card"><b>TOTAL</b><h2>{len(df_filtered)}</h2></div>', unsafe_allow_html=True)
 with m2: st.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_filtered[df_filtered["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
 with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_filtered[df_filtered["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
@@ -158,7 +160,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE & LOGIKA TOMBOL ACTION ---
+# --- 7. DATABASE & ACTION BUTTONS ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
@@ -166,16 +168,15 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # Pastikan kolom Update status bersih dari kolom ganda sebelum masuk editor
-    cols_to_show = [c for c in df_editor.columns if c != 'Update status'] + ['Update status']
-    df_editor = df_editor[cols_to_show]
+    # Paksa hanya ada satu kolom 'Update status' di tampilan editor
+    df_editor = df_editor.loc[:, ~df_editor.columns.duplicated()]
 
     edited_df = st.data_editor(
         df_editor,
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_pro"
+        key="editor_pro_final"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -206,14 +207,16 @@ if st.session_state['authenticated']:
     if a4.button("💾 SIMPAN SEMUA KE GOOGLE SHEETS", type="primary", use_container_width=True):
         try:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
+            # Final check: hapus duplikat kolom sebelum upload
+            save_data = save_data.loc[:, ~save_data.columns.duplicated()]
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Berhasil Disinkronkan!")
+            st.success("Sinkronisasi Berhasil!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # LOGIKA SUB-TOMBOL COMPLETE (MENGISI SATU KOLOM)
+    # --- PILIHAN SETELAH KLIK COMPLETE ---
     if st.session_state.show_complete_options:
-        st.info(f"📍 Update Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris terpilih:")
+        st.info(f"📍 Update Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
@@ -232,10 +235,12 @@ if st.session_state['authenticated']:
             st.session_state.show_complete_options = False
             st.rerun()
 else:
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+    st.dataframe(df_filtered.loc[:, ~df_filtered.columns.duplicated()], use_container_width=True, hide_index=True)
 
-# --- 9. EXPORT ---
+# --- 8. EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
-    df_filtered.to_excel(wr, index=False)
+    df_filtered.loc[:, ~df_filtered.columns.duplicated()].to_excel(wr, index=False)
 st.download_button("📊 EXPORT EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
+
+st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px;'>PT Nusa Halmahera Minerals | 2026</div>", unsafe_allow_html=True)
