@@ -24,14 +24,12 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note', 'PO No'])
     
+    # Cleaning kolom
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
     if 'Delivery Note' not in data.columns:
         data['Delivery Note'] = ""
-    
-    if 'Update status' in data.columns:
-        data = data.drop(columns=['Update status'])
     
     text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note']
     for col in text_cols:
@@ -58,9 +56,6 @@ with st.sidebar:
         if st.button("Logout"):
             st.session_state['authenticated'] = False
             st.rerun()
-    st.divider()
-    bg_color = st.color_picker("Warna Background", "#f1f5f9")
-    card_color = st.color_picker("Warna Card", "#ffffff")
 
 # --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
@@ -69,32 +64,31 @@ def get_base64_image(image_path):
             return base64.b64encode(img_file.read()).decode()
     return ""
 
-header_bg_base64 = get_base64_image("BG2.jpg")
-logo_base64 = get_base64_image("NHM.jpg")
+header_bg = get_base64_image("BG2.jpg")
+logo_img = get_base64_image("NHM.jpg")
 
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: {bg_color}; }}
-    .main .block-container {{ background-color: {card_color}; padding: 2rem 3rem; border-radius: 12px; }}
+    .stApp {{ background-color: #f1f5f9; }}
+    .main .block-container {{ background-color: #ffffff; padding: 2rem 3rem; border-radius: 12px; }}
     .custom-header {{
         position: relative; width: 100%; min-height: 250px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
-        background-image: url("data:image/jpeg;base64,{header_bg_base64}");
+        background-image: url("data:image/jpeg;base64,{header_bg}");
         background-size: cover; background-position: center; border: 2px solid #1f4e79;
     }}
     .giant-title {{ 
         font-family: 'serif'; font-size: 50px; font-weight: 900; color: #ffffff !important; 
         background: rgba(31, 78, 121, 0.7); padding: 10px 30px; border-radius: 10px; display: inline-block;
     }}
-    .chart-box {{ background-color: {card_color}; border: 2px solid #e2e8f0; border-radius: 15px; padding: 10px; }}
     </style>
     """, unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
-            <img src="data:image/jpeg;base64,{logo_base64}" style="height:100px; mix-blend-mode:multiply;">
+            <img src="data:image/jpeg;base64,{logo_img}" style="height:100px; mix-blend-mode:multiply;">
             <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
             <h2 style="color:white; letter-spacing:5px;">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
@@ -103,56 +97,37 @@ st.markdown(f"""
 
 # --- 5. FILTER SECTION ---
 search_q = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
-c1, c2, c3, c4 = st.columns(4)
-
 df_filtered = st.session_state.df_master.copy()
-f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
-if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
-f_fleet = c2.multiselect("Fleet", options=sorted(df_filtered['Fleet'].unique()))
-if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
-f_unit = c3.multiselect("Unit", options=sorted(df_filtered['Unit no'].unique()))
-if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
-f_stat = c4.multiselect("Status", options=sorted(df_filtered['Status'].unique()))
-if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
-
 if search_q:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 6. GRAFIK (FONT PUTIH DI DALAM) ---
+# --- 6. GRAFIK (FONT PUTIH BOLD) ---
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
-    # Konfigurasi Font Putih Bold
     font_style = dict(family="Arial Black", size=14, color="white")
     
     with g1:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
+        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="By PIC")
         fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
-        fig1.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
+        fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig1, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
         
     with g2:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="Monitoring by Status",
+        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="By Status",
                       color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
         fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
-        fig2.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
+        fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig2, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
         
     with g3:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", 
                       color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
-        # Untuk bar chart, teks diletakkan di dalam bar dengan warna putih
         fig3.update_traces(texttemplate='%{y}', textposition='inside', textfont=font_style)
-        fig3.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False, yaxis_visible=False)
+        fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig3, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 7. DATABASE DENGAN HIGHLIGHT MERAH FULL ROW ---
+# --- 7. DATABASE DENGAN EFEK "DRAG HIGHLIGHT" MERAH ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
@@ -161,16 +136,22 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    def style_row_red(row):
-        style = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
-        return [style] * len(row) if row['Pilih'] else [''] * len(row)
+    # LOGIKA STYLING: Memberikan efek highlight penuh saat kolom 'Pilih' bernilai True
+    def apply_full_drag_highlight(row):
+        # Warna merah terang untuk efek 'dragged/selected'
+        color_selected = 'background-color: #ff5252; color: white; font-weight: bold; border: 1px solid #b71c1c;'
+        return [color_selected] * len(row) if row['Pilih'] else [''] * len(row)
 
     edited_df = st.data_editor(
-        df_editor.style.apply(style_row_red, axis=1),
+        df_editor.style.apply(apply_full_drag_highlight, axis=1),
         use_container_width=True,
         hide_index=True,
-        column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_nhm_white_font"
+        column_config={
+            "Pilih": st.column_config.CheckboxColumn("Pilih", default=False, width="small"),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Outstanding", "Partial", "Complete"]),
+            "Delivery Note": st.column_config.TextColumn("Delivery Note", width="large")
+        },
+        key="editor_nhm_drag_effect"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -205,20 +186,21 @@ if st.session_state['authenticated']:
             st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
+    # LOGIKA COMPLETE (Receive on Bitung/Site)
     if st.session_state.show_complete_options:
-        st.warning("📍 Pilih Lokasi Penerimaan:")
-        c_opt1, c_opt2, c_opt3 = st.columns([1, 1, 2])
-        if c_opt1.button("📦 Bitung", use_container_width=True):
+        st.warning("📍 Pilih lokasi untuk baris yang dipilih:")
+        c1, c2, c3 = st.columns([1,1,2])
+        if c1.button("📦 Receive on Bitung", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
             st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Bitung"
             st.session_state.show_complete_options = False
             st.rerun()
-        if c_opt2.button("🚜 Site", use_container_width=True):
+        if c2.button("🚜 Receive on Site", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
             st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Site"
             st.session_state.show_complete_options = False
             st.rerun()
-        if c_opt3.button("❌ Batal", use_container_width=True):
+        if c3.button("❌ Batal", use_container_width=True):
             st.session_state.show_complete_options = False
             st.rerun()
 else:
@@ -228,4 +210,4 @@ else:
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.to_excel(wr, index=False)
-st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
