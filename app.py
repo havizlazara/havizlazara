@@ -17,25 +17,23 @@ if 'show_complete_options' not in st.session_state:
 if 'selected_rows_indices' not in st.session_state:
     st.session_state['selected_rows_indices'] = []
 
-# --- 2. KONEKSI DATA (KOLOM UPDATE STATUS DIHAPUS) ---
+# --- 2. KONEKSI DATA & DEDUPLIKASI KOLOM ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'PO No'])
+        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
-    # Hapus spasi dan kolom duplikat
+    # Menghapus spasi liar dan memastikan kolom Update status hanya ada satu
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # HAPUS KOLOM UPDATE STATUS JIKA ADA
-    if 'Update status' in data.columns:
-        data = data.drop(columns=['Update status'])
+    if 'Update status' not in data.columns:
+        data['Update status'] = ""
     
-    # Daftar kolom utama yang diproses
-    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Short Text', 'Supplier']
+    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
@@ -66,7 +64,7 @@ with st.sidebar:
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. CSS & HEADER GAMBAR ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -159,7 +157,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 7. DATABASE & ACTION BUTTONS ---
+# --- 7. DATABASE & TOMBOL ACTION ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
@@ -167,17 +165,15 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # REVISI KETAT: Memastikan kolom Update status dibuang dari tampilan
+    # Memastikan tidak ada kolom Update status duplikat di editor
     df_editor = df_editor.loc[:, ~df_editor.columns.duplicated(keep='first')]
-    if 'Update status' in df_editor.columns:
-        df_editor = df_editor.drop(columns=['Update status'])
 
     edited_df = st.data_editor(
         df_editor,
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_clean_final_v3"
+        key="editor_pro_v5"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -188,37 +184,57 @@ if st.session_state['authenticated']:
     if a1.button("🔴 Outstanding", use_container_width=True):
         if not selected_indices.empty:
             st.session_state.df_master.loc[selected_indices, 'Status'] = "Outstanding"
+            st.session_state.df_master.loc[selected_indices, 'Update status'] = ""
+            st.session_state.show_complete_options = False
             st.rerun()
 
     if a2.button("🟡 Partial", use_container_width=True):
         if not selected_indices.empty:
             st.session_state.df_master.loc[selected_indices, 'Status'] = "Partial"
+            st.session_state.df_master.loc[selected_indices, 'Update status'] = "Partial Delivery"
+            st.session_state.show_complete_options = False
             st.rerun()
 
     if a3.button("🟢 Complete", use_container_width=True):
         if not selected_indices.empty:
-            # Langsung ubah status ke Complete tanpa pilihan tambahan
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Complete"
+            st.session_state.show_complete_options = True
+            st.session_state.selected_rows_indices = selected_indices
             st.rerun()
 
     if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            if 'Update status' in save_data.columns:
-                save_data = save_data.drop(columns=['Update status'])
+            save_data = save_data.loc[:, ~save_data.columns.duplicated(keep='first')]
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Tersimpan!")
+            st.success("Sinkronisasi Berhasil!")
         except Exception as e: st.error(f"Gagal: {e}")
+
+    # LOGIKA PILIHAN LOKASI (MENGISI KOLOM UPDATE STATUS)
+    if st.session_state.show_complete_options:
+        st.info(f"📍 Pilih Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris:")
+        sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
+        
+        if sub1.button("📦 Receive on Bitung", use_container_width=True):
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Update status'] = "Receive on Bitung"
+            st.session_state.show_complete_options = False
+            st.rerun()
+            
+        if sub2.button("🚜 Receive on Site", use_container_width=True):
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Update status'] = "Receive on Site"
+            st.session_state.show_complete_options = False
+            st.rerun()
+            
+        if sub3.button("❌ Batal", use_container_width=True):
+            st.session_state.show_complete_options = False
+            st.rerun()
 else:
-    # Viewer mode juga membuang kolom Update status
-    view_df = df_filtered.loc[:, ~df_filtered.columns.duplicated()]
-    if 'Update status' in view_df.columns:
-        view_df = view_df.drop(columns=['Update status'])
-    st.dataframe(view_df, use_container_width=True, hide_index=True)
+    st.dataframe(df_filtered.loc[:, ~df_filtered.columns.duplicated()], use_container_width=True, hide_index=True)
 
 # --- 8. EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
-    df_filtered.drop(columns=['Update status'], errors='ignore').to_excel(wr, index=False)
+    df_filtered.loc[:, ~df_filtered.columns.duplicated()].to_excel(wr, index=False)
 st.download_button("📊 EXCEL EXPORT", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
