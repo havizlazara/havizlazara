@@ -24,14 +24,12 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note', 'PO No'])
     
-    # Anti Duplikat & Pembersihan Spasi Nama Kolom
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
     if 'Delivery Note' not in data.columns:
         data['Delivery Note'] = ""
     
-    # Hapus sisa-sisa Update status jika ada
     if 'Update status' in data.columns:
         data = data.drop(columns=['Update status'])
     
@@ -45,7 +43,7 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- 3. SIDEBAR (Login & Theme) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -85,8 +83,6 @@ st.markdown(f"""
         background-image: url("data:image/jpeg;base64,{header_bg_base64}");
         background-size: cover; background-position: center; border: 2px solid #1f4e79;
     }}
-    .custom-header::after {{ content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.1); z-index: 1; }}
-    .header-content {{ position: relative; z-index: 2; }}
     .giant-title {{ 
         font-family: 'serif'; font-size: 50px; font-weight: 900; color: #ffffff !important; 
         background: rgba(31, 78, 121, 0.7); padding: 10px 30px; border-radius: 10px; display: inline-block;
@@ -123,31 +119,37 @@ if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 if search_q:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 7. GRAFIK (CHART) ---
+# --- 7. GRAFIK (FORMAT SEBELUMNYA) ---
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=220, title="By PIC")
-        fig1.update_layout(margin=dict(t=30,b=0,l=0,r=0), showlegend=False)
+        # Pie Chart PIC dengan label Nama di Dalam
+        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
+        fig1.update_traces(textposition='inside', textinfo='percent+label')
+        fig1.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=220, title="By Status",
+        # Pie Chart Status dengan label Nama di Dalam
+        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="Monitoring by Status",
                       color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-        fig2.update_layout(margin=dict(t=30,b=0,l=0,r=0), showlegend=False)
+        fig2.update_traces(textposition='inside', textinfo='percent+label')
+        fig2.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+        # Bar Chart Unit dengan Warna Berbeda (Color-coded by Unit)
         ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(ud, x='Unit no', y='count', height=220, title="Top 5 Units", color_discrete_sequence=['#1f4e79'])
-        fig3.update_layout(margin=dict(t=30,b=0,l=0,r=0), yaxis_visible=False)
+        fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", 
+                      color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
+        fig3.update_layout(margin=dict(t=35,b=5,l=5,r=5), showlegend=False, yaxis_visible=False)
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE DENGAN LOGIKA HIGHLIGHT MERAH FULL ROW ---
+# --- 8. DATABASE DENGAN HIGHLIGHT MERAH FULL ROW ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
@@ -156,20 +158,17 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # FUNGSI HIGHLIGHT: Mewarnai seluruh baris (full row) jika 'Pilih' dicentang
+    # FUNGSI HIGHLIGHT: Warna merah memanjang ke seluruh kolom
     def style_row_red(row):
-        color = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
-        return [color] * len(row) if row['Pilih'] else [''] * len(row)
+        style = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
+        return [style] * len(row) if row['Pilih'] else [''] * len(row)
 
-    # Tampilkan Editor dengan Styler (Highlight Merah Full Row)
     edited_df = st.data_editor(
         df_editor.style.apply(style_row_red, axis=1),
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
-        },
-        key="editor_nhm_final_v1"
+        column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
+        key="editor_nhm_final_fixed"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -196,24 +195,24 @@ if st.session_state['authenticated']:
             st.session_state.target_indices = selected_indices
             st.rerun()
 
-    if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
+    if a4.button("💾 SIMPAN KE GSHEETS", type="primary", use_container_width=True):
         try:
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
             st.cache_data.clear()
-            st.success("Sinkronisasi Berhasil!")
+            st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # PILIHAN LOKASI COMPLETE
+    # PILIHAN LOKASI
     if st.session_state.show_complete_options:
-        st.warning("📍 Pilih Lokasi Penerimaan untuk Status Complete:")
+        st.warning("📍 Update Lokasi Penerimaan:")
         c_opt1, c_opt2, c_opt3 = st.columns([1, 1, 2])
-        if c_opt1.button("📦 Receive on Bitung", use_container_width=True):
+        if c_opt1.button("📦 Bitung", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
             st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Bitung"
             st.session_state.show_complete_options = False
             st.rerun()
-        if c_opt2.button("🚜 Receive on Site", use_container_width=True):
+        if c_opt2.button("🚜 Site", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
             st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Site"
             st.session_state.show_complete_options = False
@@ -228,4 +227,4 @@ else:
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.to_excel(wr, index=False)
-st.download_button("📊 EXCEL EXPORT", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
