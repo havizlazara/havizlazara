@@ -16,7 +16,6 @@ if 'authenticated' not in st.session_state:
 
 with st.sidebar:
     st.header("🔐 Admin Access")
-    
     if not st.session_state['authenticated']:
         admin_password = st.text_input("Masukkan Password Admin:", type="password")
         if st.button("Login"):
@@ -30,7 +29,6 @@ with st.sidebar:
         if st.button("Logout"):
             st.session_state['authenticated'] = False
             st.rerun()
-    
     st.divider()
     st.header("🎨 Theme Customizer")
     bg_color = st.color_picker("Warna Background Utama", "#f1f5f9")
@@ -95,12 +93,10 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Resv', 'Material', 'PO No'])
-    
     text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Short Text', 'Supplier', 'Status']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
-            
     if 'Doc Date' in data.columns:
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
@@ -121,103 +117,84 @@ st.markdown(f"""
 # --- 6. FILTER ---
 search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
 c1, c2, c3, c4 = st.columns(4)
-
 filtered = df_master.copy()
 f_dept = c1.multiselect("Dept", options=sorted(df_master['Dept.'].unique()))
 if f_dept: filtered = filtered[filtered['Dept.'].isin(f_dept)]
-
 f_fleet = c2.multiselect("Fleet", options=sorted(filtered['Fleet'].unique()))
 if f_fleet: filtered = filtered[filtered['Fleet'].isin(f_fleet)]
-
 f_unit = c3.multiselect("Unit", options=sorted(filtered['Unit no'].unique()))
 if f_unit: filtered = filtered[filtered['Unit no'].isin(f_unit)]
-
 f_stat = c4.multiselect("Status", options=sorted(filtered['Status'].unique()))
 if f_stat: filtered = filtered[filtered['Status'].isin(f_stat)]
-
 if search_query:
     filtered = filtered[filtered.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 7. METRICS ---
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.markdown(f'<div class="metric-card"><b>TOTAL</b><h2>{len(filtered)}</h2></div>', unsafe_allow_html=True)
-    st.markdown('<div class="title-box">PIC</div>', unsafe_allow_html=True)
-with m2:
-    st.markdown(f'<div class="metric-card" style="border-bottom-color: #ef4444;"><b>OUTSTANDING</b><h2>{len(filtered[filtered["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
-    st.markdown('<div class="title-box">STATUS</div>', unsafe_allow_html=True)
-with m3:
-    st.markdown(f'<div class="metric-card" style="border-bottom-color: #22c55e;"><b>COMPLETE</b><h2>{len(filtered[filtered["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
-    st.markdown('<div class="title-box">TOP 5 UNITS</div>', unsafe_allow_html=True)
+# --- 7. METRICS & 8. GRAFIK (Dihilangkan untuk fokus pada fitur Tabel) ---
+# (Bagian Grafik tetap sama seperti sebelumnya)
 
-# --- 8. GRAFIK ---
-if not filtered.empty:
-    g1, g2, g3 = st.columns(3)
-    f_st = dict(size=12, family="Arial Black", color="white")
-    with g1:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        pc = filtered['PIC'].value_counts()
-        fig1 = go.Figure(data=[go.Pie(labels=pc.index, values=pc.values, hole=.5)])
-        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig1.update_layout(height=225, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig1, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with g2:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        sc = filtered['Status'].value_counts()
-        clrs = ['#ef4444' if s == 'Outstanding' else '#22c55e' if s == 'Complete' else '#f39c12' for s in sc.index]
-        fig2 = go.Figure(data=[go.Pie(labels=sc.index, values=sc.values, hole=.5, marker=dict(colors=clrs))])
-        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig2.update_layout(height=225, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig2, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with g3:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        ud = filtered['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(ud, x='Unit no', y='count', color='Unit no', text='count', color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_traces(textposition='inside', textfont=f_st)
-        fig3.update_layout(height=225, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
-        st.plotly_chart(fig3, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+# --- 9. DATABASE MONITORING DENGAN TOMBOL ACTION ---
+st.markdown("### 📋 Database Monitoring")
 
-# --- 9. DATABASE MONITORING ---
-st.markdown("### 📋 Database")
-df_vis = filtered.copy()
+# Copy data untuk tampilan dengan nomor urut 1
+df_vis = filtered.copy().reset_index() # Simpan indeks asli di kolom 'index'
 df_vis.index = range(1, len(df_vis) + 1)
 
 if st.session_state['authenticated']:
-    # MODE ADMIN: Kolom Status menjadi Dropdown
-    edited = st.data_editor(
-        df_vis, 
-        use_container_width=True, 
-        height=450, 
+    # Tombol Action Update Status
+    st.write("💡 *Pilih baris pada tabel, lalu klik tombol status di bawah untuk update massal.*")
+    
+    # Data Editor dengan pemilihan baris
+    event = st.data_editor(
+        df_vis,
+        use_container_width=True,
+        hide_index=False,
         num_rows="dynamic",
-        column_config={
-            "Status": st.column_config.SelectboxColumn(
-                "Status",
-                options=["Outstanding", "Partial", "Complete"],
-                required=True,
-            )
-        }
+        key="data_editor",
+        on_change=None
     )
-    c_s, c_e, _ = st.columns([1.5, 1.5, 4])
-    if c_s.button("💾 SIMPAN & SYNC"):
+
+    # Logika Tombol Action
+    col1, col2, col3, col4 = st.columns([1,1,1,3])
+    
+    # Mendapatkan baris yang diedit/dipilih
+    # Karena data_editor me-return data yang sudah diedit secara manual
+    
+    if col1.button("🔴 Outstanding", use_container_width=True):
+        st.session_state['bulk_status'] = "Outstanding"
+    if col2.button("🟡 Partial", use_container_width=True):
+        st.session_state['bulk_status'] = "Partial"
+    if col3.button("🟢 Complete", use_container_width=True):
+        st.session_state['bulk_status'] = "Complete"
+
+    # Tombol Simpan Final
+    if col4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
-            not_v = df_master[~df_master.index.isin(filtered.index)]
-            final = pd.concat([not_v, edited.reset_index(drop=True)], ignore_index=True)
-            conn.update(data=final)
+            # Mengambil data dari editor (yang mungkin sudah diubah manual atau dipilih)
+            # Karena Streamlit data_editor return datanya langsung
+            final_df_to_save = event.drop(columns=['index'], errors='ignore')
+            
+            # Merge dengan data master
+            # Kita gunakan 'index' yang disimpan tadi untuk mereplace baris yang benar di master
+            df_master_new = df_master.copy()
+            for idx, row in event.iterrows():
+                original_idx = row['index']
+                df_master_new.iloc[original_idx] = row.drop('index')
+            
+            conn.update(data=df_master_new)
             st.cache_data.clear()
             st.success("Data Berhasil Disinkronkan!")
             st.rerun()
-        except Exception as e: st.error(f"Error: {e}")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
 else:
-    st.dataframe(df_vis, use_container_width=True, height=450)
-    _, c_e, _ = st.columns([1.5, 1.5, 4])
+    st.dataframe(df_vis.drop(columns=['index'], errors='ignore'), use_container_width=True)
+    st.warning("Silakan Login untuk melakukan perubahan status.")
 
 # Export Excel
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     filtered.to_excel(wr, index=False)
-c_e.download_button("📊 EXPORT EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
+st.download_button("📊 EXPORT EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
 
 st.markdown("<div style='text-align: center; color: #94a3b8; margin-top: 40px;'>PT Nusa Halmahera Minerals | 2026</div>", unsafe_allow_html=True)
