@@ -56,7 +56,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS & HEADER (LOGO DIPERBAIKI) ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -71,7 +71,6 @@ st.markdown(f"""
     .stApp {{ background-color: #f1f5f9; }}
     .main .block-container {{ background-color: #ffffff; padding: 2rem 3rem; border-radius: 12px; }}
     
-    /* Container Header */
     .custom-header {{
         position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
@@ -80,20 +79,11 @@ st.markdown(f"""
         background-size: cover; background-position: center; border: 3px solid #1f4e79;
     }}
     
-    /* Box Logo agar Jelas & Tajam */
     .logo-container {{
-        background-color: white; 
-        padding: 10px; 
-        border-radius: 10px; 
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        margin-bottom: 15px;
-        display: inline-block;
+        background-color: white; padding: 10px; border-radius: 10px; 
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2); margin-bottom: 15px; display: inline-block;
     }}
-    .logo-img {{
-        height: 90px;
-        width: auto;
-        display: block;
-    }}
+    .logo-img {{ height: 90px; width: auto; display: block; }}
     
     .giant-title {{ 
         font-family: 'serif'; font-size: 45px; font-weight: 900; color: #ffffff !important; 
@@ -108,7 +98,6 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# Render Header dengan Logo Tajam
 st.markdown(f"""
     <div class="custom-header">
         <div class="logo-container">
@@ -154,13 +143,13 @@ if not df_filtered.empty:
     f_st = dict(family="Arial Black", size=14, color="white")
     
     with g1:
-        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
+        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="By PIC")
         fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
         fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig1, use_container_width=True)
         
     with g2:
-        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="Monitoring by Status",
+        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="By Status",
                       color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
         fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
         fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
@@ -174,9 +163,13 @@ if not df_filtered.empty:
         fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig3, use_container_width=True)
 
-# --- 8. DATABASE DENGAN CROSS-HIGHLIGHT PO NO & 20 BARIS ---
+# --- 8. DATABASE DENGAN DINAMIS HEIGHT ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
+
+# HITUNG TINGGI DINAMIS
+# 35px per baris + 40px untuk header. Kita batasi minimal 200px dan maksimal 800px.
+calculated_height = min(max((len(df_filtered) + 1) * 35 + 40, 200), 800)
 
 if st.session_state['authenticated']:
     df_editor = df_filtered.copy()
@@ -186,26 +179,17 @@ if st.session_state['authenticated']:
     def apply_cross_highlight(row):
         color_full = 'background-color: #ff5252; color: white; font-weight: bold;'
         color_po_only = 'background-color: #b71c1c; color: white; border: 2px solid white;'
-        
         if row['Pilih']:
-            styles = []
-            for col in row.index:
-                if col == 'PO No':
-                    styles.append(color_po_only)
-                else:
-                    styles.append(color_full)
-            return styles
+            return [color_po_only if col == 'PO No' else color_full for col in row.index]
         return [''] * len(row)
 
     edited_df = st.data_editor(
         df_editor.style.apply(apply_cross_highlight, axis=1),
         use_container_width=True,
         hide_index=True,
-        height=800, # Menampilkan sekitar 20 baris
-        column_config={
-            "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
-        },
-        key="editor_nhm_final_clear"
+        height=calculated_height, # DINAMIS DISINI
+        column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
+        key="editor_nhm_dynamic_v1"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -257,7 +241,7 @@ if st.session_state['authenticated']:
             st.session_state.show_complete_options = False
             st.rerun()
 else:
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True, height=800)
+    st.dataframe(df_filtered, use_container_width=True, hide_index=True, height=calculated_height)
 
 # --- 9. EXPORT ---
 ex_buf = io.BytesIO()
