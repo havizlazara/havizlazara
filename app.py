@@ -159,7 +159,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE & FULL HIGHLIGHT LOGIC ---
+# --- 8. DATABASE & LOGIKA HIGHLIGHT MERAH ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
@@ -167,21 +167,22 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # FUNGSI HIGHLIGHT FULL ROW
-    # axis=1 memastikan pengecekan dilakukan per baris
-    def highlight_row(row):
-        color = 'background-color: #fff9c4; font-weight: bold;' # Kuning stabil
+    # FUNGSI HIGHLIGHT MERAH FULL ROW
+    def highlight_row_red(row):
+        # Jika kolom 'Pilih' dicentang (True), warnai seluruh baris merah muda transparan
+        # Warna teks putih agar kontras
+        style = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
         if row['Pilih']:
-            return [color] * len(row)
+            return [style] * len(row)
         return [''] * len(row)
 
-    # Tampilkan Editor dengan Styler (Highlight Full Row)
+    # Tampilkan Editor dengan Styler
     edited_df = st.data_editor(
-        df_editor.style.apply(highlight_row, axis=1),
+        df_editor.style.apply(highlight_row_red, axis=1),
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_highlight_v99"
+        key="editor_red_highlight_final"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -212,12 +213,12 @@ if st.session_state['authenticated']:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Sinkronisasi Berhasil!")
+            st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # PILIHAN LOKASI (Update Delivery Note)
+    # LOGIKA COMPLETE (Pilihan Bitung/Site mengisi Delivery Note)
     if st.session_state.show_complete_options:
-        st.info(f"📍 Pilih Lokasi Penerimaan untuk baris terpilih:")
+        st.info(f"📍 Pilih Lokasi Penerimaan untuk baris yang di-highlight:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
             st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
