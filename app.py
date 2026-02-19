@@ -14,8 +14,6 @@ if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'show_complete_options' not in st.session_state:
     st.session_state['show_complete_options'] = False
-if 'selected_rows_indices' not in st.session_state:
-    st.session_state['selected_rows_indices'] = []
 
 # --- 2. KONEKSI DATA & PEMBERSIHAN ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -26,7 +24,6 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note', 'PO No'])
     
-    # Anti Duplikat & Bersihkan Kolom
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
@@ -48,7 +45,7 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- 3. SIDEBAR (Login & Theme) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -67,7 +64,7 @@ with st.sidebar:
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. CSS & FUNGSI GAMBAR ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -136,98 +133,88 @@ with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c5
 
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
-    f_st = dict(size=12, family="Arial Black", color="white")
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig1 = go.Figure(data=[go.Pie(labels=df_filtered['PIC'].value_counts().index, values=df_filtered['PIC'].value_counts().values, hole=.5)])
-        fig1.update_layout(height=200, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=200)
+        fig1.update_layout(margin=dict(t=0,b=0,l=0,r=0), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        sc = df_filtered['Status'].value_counts()
-        clrs = ['#ef4444' if s == 'Outstanding' else '#22c55e' if s == 'Complete' else '#f39c12' for s in sc.index]
-        fig2 = go.Figure(data=[go.Pie(labels=sc.index, values=sc.values, hole=.5, marker=dict(colors=clrs))])
-        fig2.update_layout(height=200, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=200, color='Status',
+                      color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
+        fig2.update_layout(margin=dict(t=0,b=0,l=0,r=0), showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(ud, x='Unit no', y='count', text='count', color_discrete_sequence=['#1f4e79'])
-        fig3.update_layout(height=200, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=10,b=0,l=0,r=0))
+        fig3 = px.bar(ud, x='Unit no', y='count', height=200, color_discrete_sequence=['#1f4e79'])
+        fig3.update_layout(margin=dict(t=10,b=0,l=0,r=0), yaxis_visible=False)
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE & LOGIKA HIGHLIGHT MERAH ---
+# --- 8. DATABASE DENGAN INTERACTIVE SELECTION (HIGHLIGHT MERAH) ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
-    df_editor = df_filtered.copy()
-    if 'Pilih' not in df_editor.columns:
-        df_editor.insert(0, 'Pilih', False)
-
-    # FUNGSI HIGHLIGHT MERAH FULL ROW
-    def highlight_row_red(row):
-        # Jika kolom 'Pilih' dicentang (True), warnai seluruh baris merah muda transparan
-        # Warna teks putih agar kontras
-        style = 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
-        if row['Pilih']:
-            return [style] * len(row)
-        return [''] * len(row)
-
-    # Tampilkan Editor dengan Styler
-    edited_df = st.data_editor(
-        df_editor.style.apply(highlight_row_red, axis=1),
+    st.info("💡 Klik baris mana pun untuk memilih. Baris terpilih akan ter-highlight merah.")
+    
+    # 1. Menampilkan Tabel dengan Fitur Seleksi Baris
+    selection = st.dataframe(
+        df_filtered,
         use_container_width=True,
         hide_index=True,
-        column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_red_highlight_final"
+        on_select="rerun",  # Memicu rerun saat baris diklik
+        selection_mode="multi_row" # Bisa pilih banyak baris
     )
 
-    selected_indices = edited_df[edited_df['Pilih'] == True].index
-
+    # 2. Mendapatkan index baris yang dipilih pengguna
+    selected_indices = selection.selection.rows
+    
+    # 3. Logika Action Buttons
     st.write("🔧 **Admin Actions:**")
     a1, a2, a3, a4 = st.columns([1, 1, 1, 3])
     
-    if a1.button("🔴 Outstanding", use_container_width=True):
-        if not selected_indices.empty:
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Outstanding"
-            st.session_state.df_master.loc[selected_indices, 'Delivery Note'] = ""
+    # Tombol Action hanya jalan jika ada baris yang dipilih
+    if selected_indices:
+        # Konversi index tampilan ke index master data
+        actual_master_indices = df_filtered.index[selected_indices]
+
+        if a1.button("🔴 Outstanding", use_container_width=True):
+            st.session_state.df_master.loc[actual_master_indices, 'Status'] = "Outstanding"
+            st.session_state.df_master.loc[actual_master_indices, 'Delivery Note'] = ""
             st.rerun()
 
-    if a2.button("🟡 Partial", use_container_width=True):
-        if not selected_indices.empty:
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Partial"
-            st.session_state.df_master.loc[selected_indices, 'Delivery Note'] = "Partial Delivery"
+        if a2.button("🟡 Partial", use_container_width=True):
+            st.session_state.df_master.loc[actual_master_indices, 'Status'] = "Partial"
+            st.session_state.df_master.loc[actual_master_indices, 'Delivery Note'] = "Partial Delivery"
             st.rerun()
 
-    if a3.button("🟢 Complete", use_container_width=True):
-        if not selected_indices.empty:
+        if a3.button("🟢 Complete", use_container_width=True):
             st.session_state.show_complete_options = True
-            st.session_state.selected_rows_indices = selected_indices
+            st.session_state.current_selection = actual_master_indices
             st.rerun()
 
     if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
-            save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            conn.update(data=save_data)
+            conn.update(data=st.session_state.df_master)
             st.cache_data.clear()
-            st.success("Tersimpan!")
+            st.success("Sinkronisasi Berhasil!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # LOGIKA COMPLETE (Pilihan Bitung/Site mengisi Delivery Note)
+    # LOGIKA COMPLETE OPTIONS
     if st.session_state.show_complete_options:
-        st.info(f"📍 Pilih Lokasi Penerimaan untuk baris yang di-highlight:")
+        st.info(f"📍 Update Lokasi untuk baris yang Anda pilih:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
-            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
-            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Delivery Note'] = "Receive on Bitung"
+            st.session_state.df_master.loc[st.session_state.current_selection, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.current_selection, 'Delivery Note'] = "Receive on Bitung"
             st.session_state.show_complete_options = False
             st.rerun()
         if sub2.button("🚜 Receive on Site", use_container_width=True):
-            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
-            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Delivery Note'] = "Receive on Site"
+            st.session_state.df_master.loc[st.session_state.current_selection, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.current_selection, 'Delivery Note'] = "Receive on Site"
             st.session_state.show_complete_options = False
             st.rerun()
         if sub3.button("❌ Batal", use_container_width=True):
