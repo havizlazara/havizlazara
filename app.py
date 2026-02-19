@@ -17,7 +17,7 @@ if 'show_complete_options' not in st.session_state:
 if 'selected_rows_indices' not in st.session_state:
     st.session_state['selected_rows_indices'] = []
 
-# --- 2. KONEKSI DATA & PEMBERSIHAN KOLOM ---
+# --- 2. KONEKSI DATA & PEMBERSIHAN TOTAL ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
@@ -26,17 +26,19 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
-    # --- LOGIKA ANTI-DUPLIKAT ---
-    # 1. Hapus spasi di awal/akhir nama kolom
-    data.columns = data.columns.str.strip()
-    # 2. Hapus kolom yang namanya duplikat (ambil yang pertama saja)
-    data = data.loc[:, ~data.columns.duplicated()]
+    # --- PROSES PENGHAPUSAN KOLOM GANDA (STRICT) ---
+    # 1. Bersihkan nama kolom dari spasi liar
+    data.columns = [str(c).strip() for c in data.columns]
     
-    # Pastikan kolom Update status ada
-    if 'Update status' not in data.columns:
+    # 2. Cari kolom yang namanya mirip atau duplikat dengan "Update status"
+    # Kita hanya ambil kolom yang benar-benar kita inginkan
+    if 'Update status' in data.columns:
+        # Jika ada lebih dari satu kolom 'Update status', ambil yang pertama saja
+        data = data.loc[:, ~data.columns.duplicated(keep='first')]
+    else:
         data['Update status'] = ""
-    
-    # Daftar kolom teks yang diproses
+
+    # 3. Pastikan kolom-kolom penting bertipe string
     text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status']
     for col in text_cols:
         if col in data.columns:
@@ -161,7 +163,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 7. DATABASE & TOMBOL ACTION ---
+# --- 7. DATABASE & ACTION BUTTONS ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
@@ -169,15 +171,15 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # Memastikan tidak ada kolom duplikat sebelum ditampilkan di editor
-    df_editor = df_editor.loc[:, ~df_editor.columns.duplicated()]
+    # REVISI KETAT: Memastikan tidak ada kolom duplikat sebelum ditampilkan
+    df_editor = df_editor.loc[:, ~df_editor.columns.duplicated(keep='first')]
 
     edited_df = st.data_editor(
         df_editor,
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_pro_v2"
+        key="editor_clean_final"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -208,15 +210,16 @@ if st.session_state['authenticated']:
     if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
         try:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            save_data = save_data.loc[:, ~save_data.columns.duplicated()] # Final duplicate check
+            # Final duplicate check
+            save_data = save_data.loc[:, ~save_data.columns.duplicated()]
             conn.update(data=save_data)
             st.cache_data.clear()
             st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # LOGIKA COMPLETE (HANYA MENGISI SATU KOLOM)
+    # LOGIKA COMPLETE (HANYA SATU KOLOM)
     if st.session_state.show_complete_options:
-        st.info(f"📍 Pilih Lokasi untuk {len(st.session_state.selected_rows_indices)} baris:")
+        st.info(f"📍 Update Lokasi untuk {len(st.session_state.selected_rows_indices)} baris:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
