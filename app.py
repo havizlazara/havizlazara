@@ -12,6 +12,10 @@ st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
+if 'show_complete_options' not in st.session_state:
+    st.session_state['show_complete_options'] = False
+if 'selected_rows_indices' not in st.session_state:
+    st.session_state['selected_rows_indices'] = []
 
 # --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -20,9 +24,13 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Resv', 'Material', 'PO No'])
+        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
-    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status']
+    # Pastikan kolom Update status ada
+    if 'Update status' not in data.columns:
+        data['Update status'] = ""
+        
+    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
@@ -31,7 +39,6 @@ def load_data():
         data['Doc Date'] = pd.to_datetime(data['Doc Date'], errors='coerce').dt.date
     return data
 
-# Load master data ke session state agar perubahan tombol action bersifat instan
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -52,7 +59,6 @@ with st.sidebar:
             st.rerun()
     
     st.divider()
-    st.header("🎨 Theme Customizer")
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
@@ -107,106 +113,101 @@ search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
 c1, c2, c3, c4 = st.columns(4)
 
 df_filtered = st.session_state.df_master.copy()
-
 f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
 if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
-
 f_fleet = c2.multiselect("Fleet", options=sorted(df_filtered['Fleet'].unique()))
 if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
-
 f_unit = c3.multiselect("Unit", options=sorted(df_filtered['Unit no'].unique()))
 if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
-
 f_stat = c4.multiselect("Status", options=sorted(df_filtered['Status'].unique()))
 if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 
 if search_query:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
 
-# --- 7. SUMMARY CARDS ---
+# --- 7. SUMMARY CARDS & 8. CHART (DISEMBUNYIKAN AGAR RINGKAS) ---
 m1, m2, m3 = st.columns(3)
 with m1: st.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_filtered)}</h2></div>', unsafe_allow_html=True)
 with m2: st.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_filtered[df_filtered["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
 with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_filtered[df_filtered["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-# --- 8. CHART (FONT PUTIH BOLD) ---
-if not df_filtered.empty:
-    g1, g2, g3 = st.columns(3)
-    f_st = dict(size=12, family="Arial Black", color="white")
-    with g1:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        fig1 = go.Figure(data=[go.Pie(labels=df_filtered['PIC'].value_counts().index, values=df_filtered['PIC'].value_counts().values, hole=.5)])
-        fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig1.update_layout(height=200, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig1, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with g2:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        sc = df_filtered['Status'].value_counts()
-        clrs = ['#ef4444' if s == 'Outstanding' else '#22c55e' if s == 'Complete' else '#f39c12' for s in sc.index]
-        fig2 = go.Figure(data=[go.Pie(labels=sc.index, values=sc.values, hole=.5, marker=dict(colors=clrs))])
-        fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig2.update_layout(height=200, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig2, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with g3:
-        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-        ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(ud, x='Unit no', y='count', text='count', color_discrete_sequence=['#1f4e79'])
-        fig3.update_traces(textposition='inside', textfont=f_st)
-        fig3.update_layout(height=200, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=10,b=0,l=0,r=0))
-        st.plotly_chart(fig3, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# --- 9. DATABASE & ACTION BUTTONS ---
+# --- 9. DATABASE & LOGIKA TOMBOL ACTION ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
-    # Tambahkan kolom Pilih jika belum ada
     df_editor = df_filtered.copy()
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # Tampilkan Data Editor
     edited_df = st.data_editor(
         df_editor,
         use_container_width=True,
         hide_index=True,
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_final"
+        key="editor_pro"
     )
 
-    # TOMBOL ACTION MASSAL
-    st.write("🔧 **Bulk Actions:**")
-    a1, a2, a3, a4 = st.columns([1,1,1,3])
-    
-    # Ambil index yang dicentang
+    # Menangkap Index yang dicentang
     selected_indices = edited_df[edited_df['Pilih'] == True].index
 
+    st.write("🔧 **Admin Actions:**")
+    a1, a2, a3, a4 = st.columns([1, 1, 1, 3])
+    
+    # Tombol 1: Outstanding
     if a1.button("🔴 Outstanding", use_container_width=True):
         if not selected_indices.empty:
             st.session_state.df_master.loc[selected_indices, 'Status'] = "Outstanding"
+            st.session_state.df_master.loc[selected_indices, 'Update status'] = ""
+            st.session_state.show_complete_options = False
             st.rerun()
+
+    # Tombol 2: Partial
     if a2.button("🟡 Partial", use_container_width=True):
         if not selected_indices.empty:
             st.session_state.df_master.loc[selected_indices, 'Status'] = "Partial"
+            st.session_state.show_complete_options = False
             st.rerun()
+
+    # Tombol 3: Complete (Memicu Pilihan Tambahan)
     if a3.button("🟢 Complete", use_container_width=True):
         if not selected_indices.empty:
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Complete"
+            st.session_state.show_complete_options = True
+            st.session_state.selected_rows_indices = selected_indices
             st.rerun()
-            
+
+    # Tombol 4: Simpan ke GSheets
     if a4.button("💾 SIMPAN SEMUA KE GOOGLE SHEETS", type="primary", use_container_width=True):
         try:
-            # Drop kolom Pilih sebelum save
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Tersimpan!")
+            st.success("Sinkronisasi Berhasil!")
         except Exception as e: st.error(f"Gagal: {e}")
+
+    # --- LOGIKA SUB-TOMBOL COMPLETE ---
+    if st.session_state.show_complete_options:
+        st.info(f"📍 Menunggu lokasi penerimaan untuk {len(st.session_state.selected_rows_indices)} baris terpilih:")
+        sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
+        
+        if sub1.button("📦 Receive on Bitung", use_container_width=True):
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Update status'] = "Receive on Bitung"
+            st.session_state.show_complete_options = False # Sembunyikan lagi setelah klik
+            st.rerun()
+            
+        if sub2.button("🚜 Receive on Site", use_container_width=True):
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Status'] = "Complete"
+            st.session_state.df_master.loc[st.session_state.selected_rows_indices, 'Update status'] = "Receive on Site"
+            st.session_state.show_complete_options = False
+            st.rerun()
+            
+        if sub3.button("❌ Batal", use_container_width=True):
+            st.session_state.show_complete_options = False
+            st.rerun()
+
 else:
     st.dataframe(df_filtered, use_container_width=True, hide_index=True)
-    st.info("Login di sidebar untuk fitur Edit/Action.")
+    st.warning("Login di sidebar untuk mengaktifkan Tombol Action.")
 
 # --- 10. EXPORT ---
 ex_buf = io.BytesIO()
