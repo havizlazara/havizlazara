@@ -40,7 +40,7 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- 3. SIDEBAR (Login & Theme) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -59,7 +59,7 @@ with st.sidebar:
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. CSS & HEADER GAMBAR ---
+# --- 4. CSS & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -108,21 +108,17 @@ df_filtered = st.session_state.df_master.copy()
 
 f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
 if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
-
 f_fleet = c2.multiselect("Fleet", options=sorted(df_filtered['Fleet'].unique()))
 if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
-
 f_unit = c3.multiselect("Unit", options=sorted(df_filtered['Unit no'].unique()))
 if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
-
 f_stat = c4.multiselect("Status", options=sorted(df_filtered['Status'].unique()))
 if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 
 if search_q:
     df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 6. METRIC CARDS (TOTAL, OUTSTANDING, COMPLETE) ---
-st.markdown("---")
+# --- 6. METRIC CARDS ---
 m1, m2, m3 = st.columns(3)
 total_val = len(df_filtered)
 out_val = len(df_filtered[df_filtered['Status'] == 'Outstanding'])
@@ -164,7 +160,7 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. DATABASE DENGAN HIGHLIGHT MERAH FULL ROW ---
+# --- 8. DATABASE DENGAN HIGHLIGHT & DISPLAY 20 BARIS (HEIGHT 800) ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
@@ -173,17 +169,18 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # FUNGSI HIGHLIGHT MERAH FULL ROW
     def apply_highlight(row):
         style = 'background-color: #ff5252; color: white; font-weight: bold;'
         return [style] * len(row) if row['Pilih'] else [''] * len(row)
 
+    # Menambahkan parameter height=800 untuk menampilkan lebih banyak baris
     edited_df = st.data_editor(
         df_editor.style.apply(apply_highlight, axis=1),
         use_container_width=True,
         hide_index=True,
+        height=800, 
         column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_nhm_final_v12"
+        key="editor_nhm_long_v1"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -218,7 +215,6 @@ if st.session_state['authenticated']:
             st.success("Tersimpan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # LOGIKA COMPLETE (Bitung/Site)
     if st.session_state.show_complete_options:
         st.info("📍 Pilih lokasi untuk baris yang di-highlight:")
         c1, c2, c3 = st.columns([1,1,2])
@@ -236,7 +232,8 @@ if st.session_state['authenticated']:
             st.session_state.show_complete_options = False
             st.rerun()
 else:
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+    # Mode viewer juga menggunakan height=800
+    st.dataframe(df_filtered, use_container_width=True, hide_index=True, height=800)
 
 # --- 9. EXPORT ---
 ex_buf = io.BytesIO()
