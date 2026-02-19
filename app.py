@@ -56,7 +56,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS & HEADER ---
+# --- 4. CSS & HEADER (LOGO DIPERBAIKI) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -70,17 +70,37 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: #f1f5f9; }}
     .main .block-container {{ background-color: #ffffff; padding: 2rem 3rem; border-radius: 12px; }}
+    
+    /* Container Header */
     .custom-header {{
-        position: relative; width: 100%; min-height: 250px; padding: 40px 20px;
+        position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
         background-image: url("data:image/jpeg;base64,{header_bg}");
-        background-size: cover; background-position: center; border: 2px solid #1f4e79;
+        background-size: cover; background-position: center; border: 3px solid #1f4e79;
     }}
+    
+    /* Box Logo agar Jelas & Tajam */
+    .logo-container {{
+        background-color: white; 
+        padding: 10px; 
+        border-radius: 10px; 
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        margin-bottom: 15px;
+        display: inline-block;
+    }}
+    .logo-img {{
+        height: 90px;
+        width: auto;
+        display: block;
+    }}
+    
     .giant-title {{ 
-        font-family: 'serif'; font-size: 50px; font-weight: 900; color: #ffffff !important; 
-        background: rgba(31, 78, 121, 0.7); padding: 10px 30px; border-radius: 10px; display: inline-block;
+        font-family: 'serif'; font-size: 45px; font-weight: 900; color: #ffffff !important; 
+        background: rgba(31, 78, 121, 0.8); padding: 10px 30px; border-radius: 10px; display: inline-block;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     }}
+    
     .metric-card {{
         background: #ffffff; border-radius: 10px; padding: 15px; text-align: center;
         border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;
@@ -88,13 +108,14 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
+# Render Header dengan Logo Tajam
 st.markdown(f"""
     <div class="custom-header">
-        <div class="header-content">
-            <img src="data:image/jpeg;base64,{logo_img}" style="height:100px; mix-blend-mode:multiply;">
-            <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
-            <h2 style="color:white; letter-spacing:5px;">NHM SUPPLY CHAIN & LOGISTICS</h2>
+        <div class="logo-container">
+            <img src="data:image/jpeg;base64,{logo_img}" class="logo-img">
         </div>
+        <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
+        <h2 style="color:white; letter-spacing:5px; text-shadow: 1px 1px 3px black;">NHM SUPPLY CHAIN & LOGISTICS</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -130,18 +151,18 @@ with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c5
 # --- 7. CHART SECTION ---
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
-    font_style = dict(family="Arial Black", size=14, color="white")
+    f_st = dict(family="Arial Black", size=14, color="white")
     
     with g1:
         fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
-        fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
+        fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
         fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig1, use_container_width=True)
         
     with g2:
         fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="Monitoring by Status",
                       color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-        fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=font_style)
+        fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
         fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig2, use_container_width=True)
         
@@ -149,11 +170,11 @@ if not df_filtered.empty:
         ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", 
                       color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_traces(texttemplate='%{y}', textfont=font_style, textposition='inside')
+        fig3.update_traces(texttemplate='%{y}', textfont=f_st, textposition='inside')
         fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
         st.plotly_chart(fig3, use_container_width=True)
 
-# --- 8. DATABASE DENGAN LOGIKA CROSS-HIGHLIGHT PO NO ---
+# --- 8. DATABASE DENGAN CROSS-HIGHLIGHT PO NO & 20 BARIS ---
 st.markdown("---")
 st.markdown("### 📋 Database Monitoring")
 
@@ -162,9 +183,6 @@ if st.session_state['authenticated']:
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
 
-    # FUNGSI HIGHLIGHT: 
-    # 1. Jika baris dicentang -> Merah Full Row
-    # 2. Memberikan penekanan extra pada kolom PO No
     def apply_cross_highlight(row):
         color_full = 'background-color: #ff5252; color: white; font-weight: bold;'
         color_po_only = 'background-color: #b71c1c; color: white; border: 2px solid white;'
@@ -173,7 +191,7 @@ if st.session_state['authenticated']:
             styles = []
             for col in row.index:
                 if col == 'PO No':
-                    styles.append(color_po_only) # Warna lebih gelap untuk PO No
+                    styles.append(color_po_only)
                 else:
                     styles.append(color_full)
             return styles
@@ -183,12 +201,11 @@ if st.session_state['authenticated']:
         df_editor.style.apply(apply_cross_highlight, axis=1),
         use_container_width=True,
         hide_index=True,
-        height=800, 
+        height=800, # Menampilkan sekitar 20 baris
         column_config={
             "Pilih": st.column_config.CheckboxColumn("Pilih", default=False),
-            "PO No": st.column_config.TextColumn("PO No", help="Nomor Dokumen Utama", width="medium")
         },
-        key="editor_nhm_cross_v1"
+        key="editor_nhm_final_clear"
     )
 
     selected_indices = edited_df[edited_df['Pilih'] == True].index
@@ -246,4 +263,4 @@ else:
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.to_excel(wr, index=False)
-st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring.xlsx")
+st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
