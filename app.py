@@ -18,7 +18,6 @@ with st.sidebar:
     st.header("🔐 Admin Access")
     
     if not st.session_state['authenticated']:
-        # Form Login
         admin_password = st.text_input("Masukkan Password Admin:", type="password")
         if st.button("Login"):
             if admin_password == "nhm123":
@@ -27,7 +26,6 @@ with st.sidebar:
             else:
                 st.error("Password Salah")
     else:
-        # Tampilan jika sudah Login
         st.success("Mode Admin: Aktif")
         if st.button("Logout"):
             st.session_state['authenticated'] = False
@@ -86,7 +84,6 @@ st.markdown(f"""
         text-align: center; font-weight: bold; color: #1f4e79; margin-bottom: 15px;
     }}
     .chart-box {{ background-color: {card_color}; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; margin-bottom: 20px; }}
-    @media (max-width: 768px) {{ .giant-title {{ font-size: 28px; }} .giant-sub {{ font-size: 16px; }} }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -156,34 +153,30 @@ with m3:
 # --- 8. GRAFIK ---
 if not filtered.empty:
     g1, g2, g3 = st.columns(3)
-    ch_h = 225
     f_st = dict(size=12, family="Arial Black", color="white")
-
     with g1:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         pc = filtered['PIC'].value_counts()
         fig1 = go.Figure(data=[go.Pie(labels=pc.index, values=pc.values, hole=.5)])
         fig1.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig1.update_layout(height=ch_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        fig1.update_layout(height=225, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
     with g2:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         sc = filtered['Status'].value_counts()
-        clrs = ['#ef4444' if s == 'Outstanding' else '#22c55e' for s in sc.index]
+        clrs = ['#ef4444' if s == 'Outstanding' else '#22c55e' if s == 'Complete' else '#f39c12' for s in sc.index]
         fig2 = go.Figure(data=[go.Pie(labels=sc.index, values=sc.values, hole=.5, marker=dict(colors=clrs))])
         fig2.update_traces(textinfo='label+percent', textposition='inside', textfont=f_st)
-        fig2.update_layout(height=ch_h, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
+        fig2.update_layout(height=225, showlegend=False, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
     with g3:
         st.markdown('<div class="chart-box">', unsafe_allow_html=True)
         ud = filtered['Unit no'].value_counts().nlargest(5).reset_index()
         fig3 = px.bar(ud, x='Unit no', y='count', color='Unit no', text='count', color_discrete_sequence=px.colors.qualitative.Bold)
         fig3.update_traces(textposition='inside', textfont=f_st)
-        fig3.update_layout(height=ch_h, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
+        fig3.update_layout(height=225, showlegend=False, yaxis_visible=False, paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20,b=0,l=0,r=0))
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -193,8 +186,20 @@ df_vis = filtered.copy()
 df_vis.index = range(1, len(df_vis) + 1)
 
 if st.session_state['authenticated']:
-    # Mode Admin Aktif
-    edited = st.data_editor(df_vis, use_container_width=True, height=450, num_rows="dynamic")
+    # MODE ADMIN: Kolom Status menjadi Dropdown
+    edited = st.data_editor(
+        df_vis, 
+        use_container_width=True, 
+        height=450, 
+        num_rows="dynamic",
+        column_config={
+            "Status": st.column_config.SelectboxColumn(
+                "Status",
+                options=["Outstanding", "Partial", "Complete"],
+                required=True,
+            )
+        }
+    )
     c_s, c_e, _ = st.columns([1.5, 1.5, 4])
     if c_s.button("💾 SIMPAN & SYNC"):
         try:
@@ -202,14 +207,12 @@ if st.session_state['authenticated']:
             final = pd.concat([not_v, edited.reset_index(drop=True)], ignore_index=True)
             conn.update(data=final)
             st.cache_data.clear()
-            st.success("Berhasil!")
+            st.success("Data Berhasil Disinkronkan!")
             st.rerun()
         except Exception as e: st.error(f"Error: {e}")
 else:
-    # Mode Viewer
     st.dataframe(df_vis, use_container_width=True, height=450)
     _, c_e, _ = st.columns([1.5, 1.5, 4])
-    st.warning("Gunakan sidebar untuk Login agar dapat mengedit data.")
 
 # Export Excel
 ex_buf = io.BytesIO()
