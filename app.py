@@ -26,10 +26,12 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'PO No'])
     
+    # KUNCI: Pastikan hanya ada satu kolom Update status
     if 'Update status' not in data.columns:
         data['Update status'] = ""
         
-    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status']
+    # Daftar kolom teks yang diizinkan (Hanya satu kolom Update status di sini)
+    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Update status', 'Short Text', 'Supplier']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
@@ -41,13 +43,13 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- 3. SIDEBAR (LOGIN & THEME) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
-        admin_password = st.text_input("Password Admin:", type="password")
+        admin_pw = st.text_input("Password Admin:", type="password")
         if st.button("Login"):
-            if admin_password == "nhm123":
+            if admin_pw == "nhm123":
                 st.session_state['authenticated'] = True
                 st.rerun()
             else: st.error("Password Salah")
@@ -56,20 +58,19 @@ with st.sidebar:
         if st.button("Logout"):
             st.session_state['authenticated'] = False
             st.rerun()
-    
     st.divider()
     bg_color = st.color_picker("Warna Background", "#f1f5f9")
     card_color = st.color_picker("Warna Card", "#ffffff")
 
-# --- 4. FUNGSI GAMBAR & CSS ---
+# --- 4. CSS & HEADER GAMBAR ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
             return base64.b64encode(img_file.read()).decode()
     return ""
 
-header_bg_base64 = get_base64_image("BG2.jpg")
-logo_base64 = get_base64_image("NHM.jpg")
+header_bg = get_base64_image("BG2.jpg")
+logo_img = get_base64_image("NHM.jpg")
 
 st.markdown(f"""
     <style>
@@ -79,7 +80,7 @@ st.markdown(f"""
         position: relative; width: 100%; min-height: 250px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
-        background-image: url("data:image/jpeg;base64,{header_bg_base64}");
+        background-image: url("data:image/jpeg;base64,{header_bg}");
         background-size: cover; background-position: center; border: 2px solid #1f4e79;
     }}
     .custom-header::after {{ content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.1); z-index: 1; }}
@@ -96,45 +97,39 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. RENDER HEADER ---
 st.markdown(f"""
     <div class="custom-header">
         <div class="header-content">
-            <img src="data:image/jpeg;base64,{logo_base64}" style="height:100px; mix-blend-mode:multiply;">
+            <img src="data:image/jpeg;base64,{logo_img}" style="height:100px; mix-blend-mode:multiply;">
             <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
             <h2 style="color:white; letter-spacing:5px;">NHM SUPPLY CHAIN & LOGISTICS</h2>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-# --- 6. FILTER ---
-search_query = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
+# --- 5. FILTER ---
+search_q = st.text_input("🔎 GLOBAL SEARCH:", placeholder="Cari data...")
 c1, c2, c3, c4 = st.columns(4)
 
 df_filtered = st.session_state.df_master.copy()
-
 f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
 if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
-
 f_fleet = c2.multiselect("Fleet", options=sorted(df_filtered['Fleet'].unique()))
 if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
-
 f_unit = c3.multiselect("Unit", options=sorted(df_filtered['Unit no'].unique()))
 if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
-
 f_stat = c4.multiselect("Status", options=sorted(df_filtered['Status'].unique()))
 if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
 
-if search_query:
-    df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_query, case=False).any(), axis=1)]
+if search_q:
+    df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-# --- 7. SUMMARY CARDS ---
+# --- 6. SUMMARY CARDS & 7. GRAFIK ---
 m1, m2, m3 = st.columns(3)
 with m1: st.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_filtered)}</h2></div>', unsafe_allow_html=True)
 with m2: st.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_filtered[df_filtered["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
 with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_filtered[df_filtered["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-# --- 8. GRAFIK (CHART) ---
 if not df_filtered.empty:
     g1, g2, g3 = st.columns(3)
     f_st = dict(size=12, family="Arial Black", color="white")
@@ -163,13 +158,17 @@ if not df_filtered.empty:
         st.plotly_chart(fig3, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 9. DATABASE & LOGIKA TOMBOL ACTION ---
+# --- 8. DATABASE & LOGIKA TOMBOL ACTION ---
 st.markdown("### 📋 Database Monitoring")
 
 if st.session_state['authenticated']:
     df_editor = df_filtered.copy()
     if 'Pilih' not in df_editor.columns:
         df_editor.insert(0, 'Pilih', False)
+
+    # Pastikan kolom Update status bersih dari kolom ganda sebelum masuk editor
+    cols_to_show = [c for c in df_editor.columns if c != 'Update status'] + ['Update status']
+    df_editor = df_editor[cols_to_show]
 
     edited_df = st.data_editor(
         df_editor,
@@ -209,12 +208,12 @@ if st.session_state['authenticated']:
             save_data = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_data)
             st.cache_data.clear()
-            st.success("Sinkronisasi Berhasil!")
+            st.success("Berhasil Disinkronkan!")
         except Exception as e: st.error(f"Gagal: {e}")
 
-    # --- PILIHAN SETELAH KLIK COMPLETE ---
+    # LOGIKA SUB-TOMBOL COMPLETE (MENGISI SATU KOLOM)
     if st.session_state.show_complete_options:
-        st.info(f"📍 Pilih Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris:")
+        st.info(f"📍 Update Lokasi Penerimaan untuk {len(st.session_state.selected_rows_indices)} baris terpilih:")
         sub1, sub2, sub3 = st.columns([1.5, 1.5, 4])
         
         if sub1.button("📦 Receive on Bitung", use_container_width=True):
@@ -235,7 +234,7 @@ if st.session_state['authenticated']:
 else:
     st.dataframe(df_filtered, use_container_width=True, hide_index=True)
 
-# --- 10. EXPORT ---
+# --- 9. EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     df_filtered.to_excel(wr, index=False)
