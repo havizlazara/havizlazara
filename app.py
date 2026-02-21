@@ -15,7 +15,7 @@ if 'authenticated' not in st.session_state:
 if 'show_complete_options' not in st.session_state:
     st.session_state['show_complete_options'] = False
 
-# --- 2. KONEKSI DATA ---
+# --- 2. KONEKSI DATA & PEMBERSIHAN KOLOM KRUSIAL ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
@@ -24,17 +24,19 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'])
     
-    # Cleaning Nama Kolom
+    # NORMALISASI KOLOM: Menghapus spasi di depan/belakang nama kolom
     data.columns = [str(c).strip() for c in data.columns]
     
-    # Hapus kolom duplikat secara permanen (terutama PO Item di akhir)
+    # Hapus kolom duplikat (simpan yang pertama muncul)
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Pastikan Kolom Wajib Status & Delivery Note ada di akhir
-    if 'Status' not in data.columns: data['Status'] = "Outstanding"
-    if 'Delivery Note' not in data.columns: data['Delivery Note'] = ""
+    # Pastikan Kolom Krusial Ada (untuk mencegah KeyError)
+    required_cols = ['PO No', 'PO Item', 'Status', 'Delivery Note']
+    for col in required_cols:
+        if col not in data.columns:
+            data[col] = ""
     
-    # Format Teks agar tidak muncul .0
+    # Format Teks agar seragam dan bersih dari .0
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
             
@@ -104,16 +106,15 @@ tab_monitor, tab_update = st.tabs(["📊 Dashboard Monitoring", "🛠️ Bulk Up
 # --- TAB MONITORING ---
 with tab_monitor:
     st.markdown("### 🔍 Filter & Search")
-    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari Dept, Fleet, PO, dll...")
+    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari PO, Fleet, Supplier, dll...")
     
-    # PERBAIKAN FILTER: Mengganti PIC menjadi Fleet
     c1, c2, c3, c4 = st.columns(4)
     df_f = st.session_state.df_master.copy()
     
     f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
     if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
     
-    f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique())) # Sekarang Filter Fleet
+    f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
     if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
     
     f_unit = c3.multiselect("Unit no", options=sorted(df_f['Unit no'].unique()))
@@ -131,7 +132,7 @@ with tab_monitor:
     m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
     m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-    # Charts Permanen
+    # Charts
     if not df_f.empty:
         st.write("")
         g1, g2, g3 = st.columns(3)
@@ -193,6 +194,7 @@ with tab_monitor:
         if a4.button("💾 SAVE TO GSHEET", type="primary"):
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
+            st.cache_data.clear()
             st.success("Sinkronisasi Berhasil!")
 
         if st.session_state.show_complete_options:
@@ -209,26 +211,44 @@ with tab_monitor:
     else:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE ---
+# --- TAB UPDATE (PERBAIKAN KEYERROR) ---
 with tab_update:
     if st.session_state['authenticated']:
         st.markdown("### 🛠️ Bulk Update via PO No & Item")
-        if 'bulk_df' not in st.session_state: st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": ""}] * 5)
-        bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True)
+        # Pastikan kolom tabel input sesuai dengan nama kolom di master
+        if 'bulk_df' not in st.session_state: 
+            st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": ""}] * 5)
+        
+        bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_unique")
         
         b1, b2, b3 = st.columns(3)
-        clean_in = bulk_input[(bulk_input['PO No'] != "") & (bulk_input['PO Item'] != "")]
+        # Filter input yang tidak kosong
+        clean_in = bulk_input[(bulk_input['PO No'].astype(str).str.strip() != "") & (bulk_input['PO Item'].astype(str).str.strip() != "")]
         
         def process_bulk(stat, dn):
+            updated_count = 0
             for _, r in clean_in.iterrows():
-                mask = (st.session_state.df_master['PO No'] == str(r['PO No'])) & (st.session_state.df_master['PO Item'] == str(r['PO Item']))
-                st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
-            st.success("Update Selesai! Cek Dashboard & Simpan.")
+                p_no = str(r['PO No']).strip()
+                p_item = str(r['PO Item']).strip()
+                
+                # Logic pencocokan yang aman
+                mask = (st.session_state.df_master['PO No'].astype(str) == p_no) & \
+                       (st.session_state.df_master['PO Item'].astype(str) == p_item)
+                
+                if mask.any():
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
+                    updated_count += 1
+            
+            if updated_count > 0:
+                st.success(f"Berhasil mengupdate {updated_count} baris! Jangan lupa klik 'SAVE TO GSHEET' di tab Monitoring.")
+            else:
+                st.warning("Tidak ada PO No & Item yang cocok ditemukan.")
 
         if b1.button("Set Outstanding"): process_bulk("Outstanding", "")
         if b2.button("Set Complete (Bitung)"): process_bulk("Complete", "Receive on Bitung")
         if b3.button("Set Complete (Site)"): process_bulk("Complete", "Receive on Site")
-    else: st.warning("Silakan Login Admin di Sidebar.")
+    else: 
+        st.warning("Silakan Login Admin di Sidebar untuk menggunakan fitur Bulk Update.")
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
