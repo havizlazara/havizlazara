@@ -22,15 +22,15 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
-        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note', 'PO No'])
+        return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note', 'PO No', 'PO Item'])
     
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    if 'Delivery Note' not in data.columns:
-        data['Delivery Note'] = ""
+    if 'Delivery Note' not in data.columns: data['Delivery Note'] = ""
+    if 'PO Item' not in data.columns: data['PO Item'] = ""
     
-    text_cols = ['Resv', 'Material', 'PO No', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note']
+    text_cols = ['Resv', 'Material', 'PO No', 'PO Item', 'Dept.', 'Fleet', 'Unit no', 'PIC', 'Status', 'Delivery Note']
     for col in text_cols:
         if col in data.columns:
             data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
@@ -70,7 +70,6 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: #f1f5f9; }}
     .main .block-container {{ background-color: #ffffff; padding: 2rem 3rem; border-radius: 12px; }}
-    
     .custom-header {{
         position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
@@ -78,173 +77,123 @@ st.markdown(f"""
         background-image: url("data:image/jpeg;base64,{header_bg}");
         background-size: cover; background-position: center; border: 3px solid #1f4e79;
     }}
-    
-    .logo-container {{
-        background-color: white; padding: 10px; border-radius: 10px; 
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2); margin-bottom: 15px; display: inline-block;
-    }}
-    .logo-img {{ height: 90px; width: auto; display: block; }}
-    
+    .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
+    .logo-img {{ height: 90px; width: auto; }}
     .giant-title {{ 
         font-family: 'serif'; font-size: 45px; font-weight: 900; color: #ffffff !important; 
         background: rgba(31, 78, 121, 0.8); padding: 10px 30px; border-radius: 10px; display: inline-block;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    }}
-    
-    .metric-card {{
-        background: #ffffff; border-radius: 10px; padding: 15px; text-align: center;
-        border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;
     }}
     </style>
-    """, unsafe_allow_html=True)
-
-st.markdown(f"""
     <div class="custom-header">
-        <div class="logo-container">
-            <img src="data:image/jpeg;base64,{logo_img}" class="logo-img">
-        </div>
+        <div class="logo-container"><img src="data:image/jpeg;base64,{logo_img}" class="logo-img"></div>
         <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
-        <h2 style="color:white; letter-spacing:5px; text-shadow: 1px 1px 3px black;">NHM SUPPLY CHAIN & LOGISTICS</h2>
+        <h2 style="color:white; letter-spacing:5px;">NHM SUPPLY CHAIN & LOGISTICS</h2>
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. FILTER SECTION ---
-st.markdown("### 🔍 Filter Monitoring")
-search_q = st.text_input("🔎 Global Search:", placeholder="Cari data...")
-
-c1, c2, c3, c4 = st.columns(4)
-df_filtered = st.session_state.df_master.copy()
-
-f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
-if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
-f_fleet = c2.multiselect("Fleet", options=sorted(df_filtered['Fleet'].unique()))
-if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
-f_unit = c3.multiselect("Unit", options=sorted(df_filtered['Unit no'].unique()))
-if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
-f_stat = c4.multiselect("Status", options=sorted(df_filtered['Status'].unique()))
-if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
-
-if search_q:
-    df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
-
-# --- 6. METRIC CARDS ---
-m1, m2, m3 = st.columns(3)
-total_val = len(df_filtered)
-out_val = len(df_filtered[df_filtered['Status'] == 'Outstanding'])
-comp_val = len(df_filtered[df_filtered['Status'] == 'Complete'])
-
-with m1: st.markdown(f'<div class="metric-card"><b>TOTAL PO ITEMS</b><h2>{total_val}</h2></div>', unsafe_allow_html=True)
-with m2: st.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{out_val}</h2></div>', unsafe_allow_html=True)
-with m3: st.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{comp_val}</h2></div>', unsafe_allow_html=True)
-
-# --- 7. CHART SECTION ---
-if not df_filtered.empty:
-    g1, g2, g3 = st.columns(3)
-    f_st = dict(family="Arial Black", size=14, color="white")
-    
-    with g1:
-        fig1 = px.pie(df_filtered, names='PIC', hole=.4, height=250, title="By PIC")
-        fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
-        fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-        st.plotly_chart(fig1, use_container_width=True)
-        
-    with g2:
-        fig2 = px.pie(df_filtered, names='Status', hole=.4, height=250, title="By Status",
-                      color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-        fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_st)
-        fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-        st.plotly_chart(fig2, use_container_width=True)
-        
-    with g3:
-        ud = df_filtered['Unit no'].value_counts().nlargest(5).reset_index()
-        fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", 
-                      color='Unit no', color_discrete_sequence=px.colors.qualitative.Bold)
-        fig3.update_traces(texttemplate='%{y}', textfont=f_st, textposition='inside')
-        fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
-        st.plotly_chart(fig3, use_container_width=True)
-
-# --- 8. DATABASE DENGAN DINAMIS HEIGHT ---
-st.markdown("---")
-st.markdown("### 📋 Database Monitoring")
-
-# HITUNG TINGGI DINAMIS
-# 35px per baris + 40px untuk header. Kita batasi minimal 200px dan maksimal 800px.
-calculated_height = min(max((len(df_filtered) + 1) * 35 + 40, 200), 800)
-
+# --- 5. TABS ---
 if st.session_state['authenticated']:
-    df_editor = df_filtered.copy()
-    if 'Pilih' not in df_editor.columns:
-        df_editor.insert(0, 'Pilih', False)
+    tab_monitor, tab_update = st.tabs(["📊 Monitoring Dashboard", "🛠️ Bulk Update Status"])
+else:
+    tab_monitor = st.container()
+    tab_update = None
 
-    def apply_cross_highlight(row):
-        color_full = 'background-color: #ff5252; color: white; font-weight: bold;'
-        color_po_only = 'background-color: #b71c1c; color: white; border: 2px solid white;'
-        if row['Pilih']:
-            return [color_po_only if col == 'PO No' else color_full for col in row.index]
-        return [''] * len(row)
+# --- TAB MONITORING ---
+with tab_monitor:
+    st.markdown("### 🔍 Filter Monitoring")
+    search_q = st.text_input("🔎 Global Search:", placeholder="Cari data...")
 
-    edited_df = st.data_editor(
-        df_editor.style.apply(apply_cross_highlight, axis=1),
-        use_container_width=True,
-        hide_index=True,
-        height=calculated_height, # DINAMIS DISINI
-        column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", default=False)},
-        key="editor_nhm_dynamic_v1"
-    )
-
-    selected_indices = edited_df[edited_df['Pilih'] == True].index
-
-    # ACTION BUTTONS
-    st.write("🔧 **Admin Actions:**")
-    a1, a2, a3, a4 = st.columns([1, 1, 1, 3])
+    # Filter Logic
+    c1, c2, c3, c4 = st.columns(4)
+    df_f = st.session_state.df_master.copy()
+    f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
+    if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+    f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
+    if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
     
-    if a1.button("🔴 Outstanding", use_container_width=True):
-        if not selected_indices.empty:
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Outstanding"
-            st.session_state.df_master.loc[selected_indices, 'Delivery Note'] = ""
-            st.rerun()
+    if search_q:
+        df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-    if a2.button("🟡 Partial", use_container_width=True):
-        if not selected_indices.empty:
-            st.session_state.df_master.loc[selected_indices, 'Status'] = "Partial"
-            st.session_state.df_master.loc[selected_indices, 'Delivery Note'] = "Partial Delivery"
-            st.rerun()
+    # Metrics
+    m1, m2, m3 = st.columns(3)
+    m1.metric("TOTAL ITEMS", len(df_f))
+    m2.metric("OUTSTANDING", len(df_f[df_f['Status'] == 'Outstanding']))
+    m3.metric("COMPLETE", len(df_f[df_f['Status'] == 'Complete']))
 
-    if a3.button("🟢 Complete", use_container_width=True):
-        if not selected_indices.empty:
-            st.session_state.show_complete_options = True
-            st.session_state.target_indices = selected_indices
-            st.rerun()
+    # Database
+    calc_h = min(max((len(df_f) + 1) * 35 + 40, 250), 800)
+    
+    if st.session_state['authenticated']:
+        df_ed = df_f.copy()
+        if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
+        
+        def apply_style(row):
+            c_f = 'background-color: #ff5252; color: white;'
+            c_p = 'background-color: #b71c1c; color: white; font-weight: bold;'
+            return [c_p if col == 'PO No' else c_f for col in row.index] if row['Pilih'] else [''] * len(row)
 
-    if a4.button("💾 SIMPAN KE CLOUD", type="primary", use_container_width=True):
-        try:
+        res_ed = st.data_editor(df_ed.style.apply(apply_style, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="main_editor")
+        
+        if st.button("💾 SIMPAN SEMUA PERUBAHAN", type="primary"):
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
-            st.cache_data.clear()
             st.success("Tersimpan!")
-        except Exception as e: st.error(f"Gagal: {e}")
+    else:
+        st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-    if st.session_state.show_complete_options:
-        st.info("📍 Pilih lokasi untuk dokumen PO terpilih:")
-        c1, c2, c3 = st.columns([1,1,2])
-        if c1.button("📦 Receive on Bitung", use_container_width=True):
-            st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
-            st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Bitung"
-            st.session_state.show_complete_options = False
-            st.rerun()
-        if c2.button("🚜 Receive on Site", use_container_width=True):
-            st.session_state.df_master.loc[st.session_state.target_indices, 'Status'] = "Complete"
-            st.session_state.df_master.loc[st.session_state.target_indices, 'Delivery Note'] = "Receive on Site"
-            st.session_state.show_complete_options = False
-            st.rerun()
-        if c3.button("❌ Batal", use_container_width=True):
-            st.session_state.show_complete_options = False
-            st.rerun()
-else:
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True, height=calculated_height)
+# --- TAB UPDATE (FITUR BARU) ---
+if tab_update:
+    with tab_update:
+        st.markdown("### 🛠️ Bulk Update Berdasarkan PO & Item")
+        st.info("Petunjuk: Masukkan daftar PO No dan PO Item di tabel bawah ini untuk merubah Status secara massal.")
+        
+        # Buat dataframe kosong untuk input admin
+        if 'bulk_input' not in st.session_state:
+            st.session_state.bulk_input = pd.DataFrame([{"PO No": "", "PO Item": ""}] * 10)
+        
+        input_data = st.data_editor(
+            st.session_state.bulk_input, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="bulk_editor"
+        )
+        
+        st.markdown("---")
+        st.write("📍 **Pilih Aksi untuk data di atas:**")
+        b1, b2, b3, b4 = st.columns(4)
+        
+        # Bersihkan input yang kosong
+        clean_input = input_data[(input_data['PO No'] != "") & (input_data['PO Item'] != "")]
+        
+        def bulk_process(new_status, new_dn):
+            count = 0
+            for idx, row in clean_input.iterrows():
+                target = (st.session_state.df_master['PO No'] == str(row['PO No'])) & \
+                         (st.session_state.df_master['PO Item'] == str(row['PO Item']))
+                if target.any():
+                    st.session_state.df_master.loc[target, 'Status'] = new_status
+                    st.session_state.df_master.loc[target, 'Delivery Note'] = new_dn
+                    count += 1
+            if count > 0:
+                st.success(f"Berhasil mengupdate {count} baris data!")
+                st.balloons()
+            else:
+                st.warning("Tidak ada data yang cocok ditemukan di Database.")
+
+        if b1.button("🔴 Set Outstanding", use_container_width=True):
+            bulk_process("Outstanding", "")
+            
+        if b2.button("🟡 Set Partial", use_container_width=True):
+            bulk_process("Partial", "Partial Delivery")
+            
+        if b3.button("🟢 Set Complete (Site)", use_container_width=True):
+            bulk_process("Complete", "Receive on Site")
+            
+        if b4.button("🟢 Set Complete (Bitung)", use_container_width=True):
+            bulk_process("Complete", "Receive on Bitung")
 
 # --- 9. EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
-    df_filtered.to_excel(wr, index=False)
-st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+    st.session_state.df_master.to_excel(wr, index=False)
+st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
