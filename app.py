@@ -26,17 +26,15 @@ def load_data():
     
     # Cleaning Nama Kolom
     data.columns = [str(c).strip() for c in data.columns]
+    
+    # Hapus kolom duplikat secara permanen (terutama PO Item di akhir)
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Pastikan Kolom Wajib Ada
+    # Pastikan Kolom Wajib Status & Delivery Note ada di akhir
     if 'Status' not in data.columns: data['Status'] = "Outstanding"
     if 'Delivery Note' not in data.columns: data['Delivery Note'] = ""
     
-    # Menghapus kolom PO Item ganda jika terdeteksi (Hanya simpan yang pertama)
-    if data.columns.tolist().count('PO Item') > 1:
-        data = data.loc[:, ~data.columns.duplicated()]
-
-    # Format Teks
+    # Format Teks agar tidak muncul .0
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
             
@@ -105,21 +103,24 @@ tab_monitor, tab_update = st.tabs(["📊 Dashboard Monitoring", "🛠️ Bulk Up
 
 # --- TAB MONITORING ---
 with tab_monitor:
-    # Filter
     st.markdown("### 🔍 Filter & Search")
-    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari Dept, PIC, PO, dll...")
+    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari Dept, Fleet, PO, dll...")
     
+    # PERBAIKAN FILTER: Mengganti PIC menjadi Fleet
     c1, c2, c3, c4 = st.columns(4)
     df_f = st.session_state.df_master.copy()
     
     f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
     if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
-    f_pic = c2.multiselect("PIC", options=sorted(df_f['PIC'].unique()))
-    if f_pic: df_f = df_f[df_f['PIC'].isin(f_pic)]
-    f_stat = c3.multiselect("Status", options=sorted(df_f['Status'].unique()))
-    if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-    f_unit = c4.multiselect("Unit no", options=sorted(df_f['Unit no'].unique()))
+    
+    f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique())) # Sekarang Filter Fleet
+    if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
+    
+    f_unit = c3.multiselect("Unit no", options=sorted(df_f['Unit no'].unique()))
     if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
+    
+    f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
+    if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
 
     if search_q:
         df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
@@ -130,7 +131,7 @@ with tab_monitor:
     m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
     m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-    # Charts
+    # Charts Permanen
     if not df_f.empty:
         st.write("")
         g1, g2, g3 = st.columns(3)
@@ -173,7 +174,7 @@ with tab_monitor:
             c_po = 'background-color: #b71c1c; color: white; border: 1px solid white;'
             return [c_po if col == 'PO No' else c_full for col in row.index] if row['Pilih'] else [''] * len(row)
 
-        res_ed = st.data_editor(df_ed.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="editor_vFinal")
+        res_ed = st.data_editor(df_ed.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="editor_vFixed")
         
         # Action Buttons
         sel_idx = res_ed[res_ed['Pilih'] == True].index
@@ -192,7 +193,7 @@ with tab_monitor:
         if a4.button("💾 SAVE TO GSHEET", type="primary"):
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
-            st.success("Data Berhasil Disinkronkan!")
+            st.success("Sinkronisasi Berhasil!")
 
         if st.session_state.show_complete_options:
             st.info("📍 Pilih lokasi untuk status Complete:")
@@ -222,15 +223,15 @@ with tab_update:
             for _, r in clean_in.iterrows():
                 mask = (st.session_state.df_master['PO No'] == str(r['PO No'])) & (st.session_state.df_master['PO Item'] == str(r['PO Item']))
                 st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
-            st.success("Update Selesai! Silakan cek Dashboard & Simpan.")
+            st.success("Update Selesai! Cek Dashboard & Simpan.")
 
         if b1.button("Set Outstanding"): process_bulk("Outstanding", "")
         if b2.button("Set Complete (Bitung)"): process_bulk("Complete", "Receive on Bitung")
         if b3.button("Set Complete (Site)"): process_bulk("Complete", "Receive on Site")
-    else: st.warning("Silakan Login Admin di Sidebar untuk menggunakan fitur ini.")
+    else: st.warning("Silakan Login Admin di Sidebar.")
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     st.session_state.df_master.to_excel(wr, index=False)
-st.download_button("📊 DOWNLOAD EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
