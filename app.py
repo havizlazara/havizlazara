@@ -18,8 +18,8 @@ if 'show_complete_options' not in st.session_state:
 # --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=10)
 def load_data():
+    # Menggunakan ttl=0 agar selalu mengambil data paling fresh saat dipanggil
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'])
@@ -27,16 +27,18 @@ def load_data():
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
+    # Pastikan Kolom Krusial
     required_cols = ['PO No', 'PO Item', 'Status', 'Delivery Note']
     for col in required_cols:
-        if col not in data.columns:
-            data[col] = ""
+        if col not in data.columns: data[col] = ""
     
+    # Konversi semua ke string untuk keamanan GSheets
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
             
     return data
 
+# Load data ke session state jika belum ada
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -52,6 +54,10 @@ with st.sidebar:
             else: st.error("Password Salah")
     else:
         st.success("Mode Admin Aktif")
+        if st.button("Refresh Data"): # Tombol manual untuk tarik data ulang
+            st.cache_data.clear()
+            st.session_state.df_master = load_data()
+            st.rerun()
         if st.button("Logout"):
             st.session_state['authenticated'] = False
             st.rerun()
@@ -86,7 +92,6 @@ st.markdown(f"""
         background: white; border-radius: 10px; padding: 15px; text-align: center;
         border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }}
-    .chart-box {{ background-color: white; border: 2px solid #e2e8f0; border-radius: 15px; padding: 10px; }}
     </style>
     <div class="custom-header">
         <div class="logo-container"><img src="data:image/jpeg;base64,{logo_img}" style="height:90px;"></div>
@@ -105,11 +110,9 @@ else:
 # --- TAB MONITORING ---
 with tab_monitor:
     st.markdown("### 🔍 Filter & Search")
-    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari data...")
-    
-    c1, c2, c3, c4 = st.columns(4)
     df_f = st.session_state.df_master.copy()
     
+    c1, c2, c3, c4 = st.columns(4)
     f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
     if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
     f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
@@ -119,6 +122,7 @@ with tab_monitor:
     f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
     if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
 
+    search_q = st.text_input("🔎 Search All Columns:", placeholder="Cari data...")
     if search_q:
         df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
@@ -129,34 +133,6 @@ with tab_monitor:
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-        if not df_f.empty:
-            st.write("")
-            g1, g2, g3 = st.columns(3)
-            f_white = dict(family="Arial Black", size=14, color="white")
-            with g1:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig1 = px.pie(df_f, names='PIC', hole=.4, height=250, title="Monitoring by PIC")
-                fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig1, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with g2:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig2 = px.pie(df_f, names='Status', hole=.4, height=250, title="Monitoring by Status",
-                              color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-                fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig2, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with g3:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", color='Unit no')
-                fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
-                fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig3, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-    
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring")
     calc_h = min(max((len(df_f) + 1) * 35 + 45, 250), 800)
@@ -175,50 +151,31 @@ with tab_monitor:
         sel_idx = res_ed[res_ed['Pilih'] == True].index
         st.write("🔧 **Admin Quick Actions:**")
         a1, a2, a3, a4 = st.columns([1,1,1,2])
+        
         if a1.button("🔴 Set Outstanding") and not sel_idx.empty:
             st.session_state.df_master.loc[sel_idx, ['Status', 'Delivery Note']] = ["Outstanding", ""]
-            st.rerun()
-        if a2.button("🟡 Set Partial") and not sel_idx.empty:
-            st.session_state.df_master.loc[sel_idx, ['Status', 'Delivery Note']] = ["Partial", "Partial Delivery"]
-            st.rerun()
-        if a3.button("🟢 Set Complete") and not sel_idx.empty:
-            st.session_state.show_complete_options = True
-            st.session_state.targets = sel_idx
             st.rerun()
         if a4.button("💾 SAVE TO GSHEET", type="primary"):
             save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=save_df)
-            st.cache_data.clear()
-            st.success("Tersimpan!")
-
-        if st.session_state.show_complete_options:
-            st.info("📍 Pilih lokasi penerimaan:")
-            cb1, cb2 = st.columns(2)
-            if cb1.button("Receive at Bitung"):
-                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive at Bitung"]
-                st.session_state.show_complete_options = False
-                st.rerun()
-            if cb2.button("Receive at Site"):
-                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive at Site"]
-                st.session_state.show_complete_options = False
-                st.rerun()
+            st.cache_data.clear() # MEMBERSIHKAN CACHE
+            st.success("Berhasil Disimpan ke Cloud!")
+            st.rerun()
     else:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE (LOGIKA BULK BITUNG & SITE) ---
+# --- TAB UPDATE (PERBAIKAN VISUAL & LOGIKA) ---
 if tab_update:
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status & Delivery Note")
-        st.write("Isi PO No dan PO Item, lalu klik tombol Bulk untuk update otomatis.")
+        st.write("1. Masukkan PO No & Item. 2. Klik tombol aksi. 3. Cek Dashboard Monitoring untuk melihat hasil.")
         
         if 'bulk_df' not in st.session_state: 
             st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
         
-        bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_auth")
+        bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor")
         
-        st.write("⚙️ **Aksi Pemrosesan:**")
         b1, b2, b3, b_manual = st.columns(4)
-        
         clean_in = bulk_input[(bulk_input['PO No'].astype(str).str.strip() != "") & (bulk_input['PO Item'].astype(str).str.strip() != "")]
         
         def process_bulk(stat=None, dn=None, use_manual=False):
@@ -232,8 +189,10 @@ if tab_update:
                     else:
                         st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
                     updated += 1
-            if updated > 0: st.success(f"Berhasil mengupdate {updated} baris! Cek Dashboard dan Save.")
-            else: st.warning("Data tidak ditemukan.")
+            if updated > 0: 
+                st.success(f"Berhasil memproses {updated} baris! Data sudah masuk ke Database. Silakan cek tab Dashboard.")
+            else: 
+                st.warning("Data tidak ditemukan di database.")
 
         if b1.button("🔴 Bulk Outstanding"): process_bulk("Outstanding", "")
         if b2.button("🟢 Bulk Bitung"): process_bulk("Complete", "Receive at Bitung")
