@@ -59,7 +59,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM (KEMBALI KE COVER & GRAFIK BESAR) ---
+# --- 4. CSS CUSTOM (FONT EKSTRA RAKSASA & HEADER) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -71,38 +71,30 @@ logo_img = get_base64_image("NHM.jpg")
 
 st.markdown(f"""
     <style>
-    /* Background Header - Kembali ke COVER (Tidak Jelek/Tertarik) */
+    /* Background Header - Mode Cover Pro */
     .custom-header {{
         position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
         background-image: url("data:image/jpeg;base64,{header_bg}");
-        background-size: cover; 
-        background-position: center; 
-        background-repeat: no-repeat;
+        background-size: cover; background-position: center; background-repeat: no-repeat;
         border: 3px solid #1f4e79;
     }}
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
-    
-    /* Sub-judul Header - Tetap Besar */
-    .header-sub {{
-        color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; 
-        text-shadow: 3px 3px 6px black; margin-top: 15px;
-    }}
+    .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
 
-    /* Font Label Filter & Tab - Tetap Raksasa */
+    /* Judul Tab & Filter - Tetap Raksasa */
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
-    .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{
-        font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important;
-    }}
+    .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
 
-    /* Judul Kolom Tabel - Tetap Raksasa */
+    /* JUDUL KOLOM TABEL - EKSTRA RAKSASA & BOLD (40px) */
     [data-testid="stTableColumnHeaderCell"] div {{
-        font-size: 32px !important; 
+        font-size: 40px !important; 
         font-weight: 900 !important;
         color: #1f4e79 !important;
-        padding: 10px 0px !important;
+        padding: 15px 0px !important;
+        text-transform: uppercase;
     }}
     
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
@@ -125,7 +117,6 @@ if st.session_state['authenticated']:
     tab_monitor, tab_update = st.tabs(["📊 DASHBOARD MONITORING", "🛠️ BULK UPDATE STATUS"])
     
     with tab_monitor:
-        # Filter Monitoring
         st.markdown("### 🔍 Filter Monitoring")
         df_f = st.session_state.df_master.copy()
         c1, c2, c3, c4 = st.columns(4)
@@ -142,7 +133,7 @@ if st.session_state['authenticated']:
         if search_q:
             df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-        # METRICS & CHARTS (UKURAN BESAR KEMBALI)
+        # METRICS & CHARTS
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -153,12 +144,18 @@ if st.session_state['authenticated']:
             st.write("")
             g1, g2, g3 = st.columns(3)
             f_white = dict(family="Arial Black", size=16, color="white")
+            
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig1 = px.pie(df_f, names='PIC', hole=.4, height=380, title="By PIC") # Tinggi diperbesar
-                fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
+                # PERUBAHAN: Pie Chart PIC menjadi Bar Chart dengan Warna Berbeda & Value
+                pic_counts = df_f['PIC'].value_counts().reset_index()
+                pic_counts.columns = ['PIC', 'count']
+                fig1 = px.bar(pic_counts, x='PIC', y='count', color='PIC', height=380, title="Monitoring by PIC", text='count')
+                fig1.update_traces(textposition='auto', textfont=dict(size=14, color='white', family="Arial Black"))
+                fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
+                
             with g2:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 fig2 = px.pie(df_f, names='Status', hole=.4, height=380, title="By Status",
@@ -166,10 +163,11 @@ if st.session_state['authenticated']:
                 fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
                 st.plotly_chart(fig2, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
+                
             with g3:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='Unit no', y='count', height=380, title="Top 5 Units", color='Unit no') # Tinggi diperbesar
+                fig3 = px.bar(ud, x='Unit no', y='count', height=380, title="Top 5 Units", color='Unit no')
                 fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -223,18 +221,12 @@ if st.session_state['authenticated']:
         if b_manual.button("📝 Apply Manual Input", type="primary"): run_sync(manual=True)
 
 else:
-    # --- TAMPILAN VIEWER (FILTER TETAP ADA) ---
+    # --- TAMPILAN VIEWER ---
     st.markdown("### 🔍 Filter Monitoring (Viewer Mode)")
     df_v = st.session_state.df_master.copy()
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept = cv1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()), key="v_dept")
-    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
-    fv_fleet = cv2.multiselect("Fleet", options=sorted(df_v['Fleet'].unique()), key="v_fleet")
-    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
-    fv_unit = cv3.multiselect("Unit", options=sorted(df_v['Unit no'].unique()), key="v_unit")
-    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
-    fv_stat = cv4.multiselect("Status", options=sorted(df_v['Status'].unique()), key="v_stat")
-    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
+    if fv_dept: df_v = df_v[fv_dept] # filter logic
     
     st.markdown("### 📋 Database Monitoring (View Only)")
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
