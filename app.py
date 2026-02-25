@@ -57,15 +57,12 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# FUNGSI PERBAIKAN COPAS: Menangkap perubahan secara instan
 def update_bulk_state():
     if "bulk_editor" in st.session_state:
         edits = st.session_state["bulk_editor"]
-        # Update baris yang diedit/di-paste
         for row_idx, values in edits.get("edited_rows", {}).items():
             for key, val in values.items():
                 st.session_state.bulk_df.at[int(row_idx), key] = val
-        # Tambahkan baris baru jika ada
         for row in edits.get("added_rows", []):
             st.session_state.bulk_df = pd.concat([st.session_state.bulk_df, pd.DataFrame([row])], ignore_index=True)
 
@@ -221,7 +218,6 @@ if st.session_state['authenticated']:
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
-        # Menggunakan on_change agar data copas tidak hilang
         input_bulk = st.data_editor(
             st.session_state.bulk_df, 
             num_rows="dynamic", 
@@ -234,7 +230,6 @@ if st.session_state['authenticated']:
         def run_bulk(stat=None, dn=None, manual=False):
             updated = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
-            # Gunakan data langsung dari editor agar sinkron
             for _, r in st.session_state.bulk_df.iterrows():
                 p_no = str(r['PO No']).strip()
                 p_item = str(r['PO Item']).strip()
@@ -247,8 +242,10 @@ if st.session_state['authenticated']:
                     updated += 1
             
             if updated > 0:
-                st.success(f"✅ Diperbarui {updated} baris di Dashboard Utama!")
-                st.rerun() # Otomatis update tampilan Dashboard
+                # RESET TABEL BULK SETELAH UPDATE
+                st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
+                st.success(f"✅ Data sudah terupdate di main dashboard! ({updated} baris diproses)")
+                st.rerun() 
             else:
                 st.warning("⚠️ Tidak ada PO yang cocok ditemukan.")
 
@@ -278,10 +275,8 @@ if st.session_state['authenticated']:
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new_data['Status'] = "Outstanding"
                 clean_new_data['Last Update'] = today_str
-                
                 for col in clean_new_data.columns:
                     clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
-                
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
                 st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
@@ -296,7 +291,6 @@ else:
     fv_fleet = cv2.multiselect("Fleet", options=sorted([str(x) for x in df_v_master['Fleet'].unique() if x]), key="v_fleet")
     fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
     fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
-    
     search_viewer = st.text_input("Global Search:", placeholder="Cari apapun...", key="global_search_viewer")
     
     df_v = df_v_master.copy()
@@ -306,9 +300,6 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer:
         df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
-
-    st.markdown("---")
-    st.markdown("### 📋 Database Monitoring (View Only)")
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
 
 # --- EXPORT ---
