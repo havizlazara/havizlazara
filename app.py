@@ -16,11 +16,13 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi (PR No & PR Item ditambahkan di antara Resv dan Material)
+# Urutan kolom resmi
 COLUMNS_ORDER = [
-    'Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 
-    'PR No', 'PR Item', # Kolom Baru
-    'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'
+    'Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
+    'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
+    'Delivery Date', 'DDP', 'Supplier', 'Status', 
+    'Last Update', 
+    'Delivery Note'
 ]
 
 if 'daily_df' not in st.session_state:
@@ -36,19 +38,15 @@ def load_data():
     
     data.columns = [str(c).strip() for c in data.columns]
     
-    # Cleaning sisa kolom typo lama
     for old_col in ['Deliv. Date', 'Delivery date']:
         if old_col in data.columns:
             data = data.drop(columns=[old_col])
             
-    # Pastikan semua kolom baru ada di dataframe master
     for col in COLUMNS_ORDER:
         if col not in data.columns:
             data[col] = ""
             
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
-    
-    # Sorting kolom sesuai urutan COLUMNS_ORDER
     data = data[COLUMNS_ORDER]
     
     for col in data.columns:
@@ -201,12 +199,12 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
-        # Dashboard utama dengan kolom PR
         edited_table = st.data_editor(
             df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor",
             column_config={
                 "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date")
+                "Doc Date": st.column_config.TextColumn("Doc Date"),
+                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
             }
         )
         
@@ -221,14 +219,20 @@ if st.session_state['authenticated']:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
         b1, b2, b3, b4 = st.columns(4)
+        
         def run_bulk(stat=None, dn=None, manual=False):
             updated = 0
+            # FORMAT TANGGAL DIUBAH DD-MM-YYYY
+            today_str = datetime.now().strftime("%d-%m-%Y")
             for _, r in st.session_state.bulk_df.iterrows():
                 mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
                 if mask.any() and str(r['PO No']).strip() != "":
-                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
+                    t_stat = str(r['Status']) if manual else stat
+                    t_dn = str(r['Delivery Note']) if manual else dn
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [t_stat, t_dn, today_str]
                     updated += 1
-            st.success(f"✅ Diperbarui {updated} baris di Memori.")
+            st.success(f"✅ Diperbarui {updated} baris di Memori (Tanggal Update: {today_str}).")
+        
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
         if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
@@ -236,14 +240,15 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Kolom PR No dan PR Item sudah tersedia.")
+        st.info("Paste baris baru di sini. Kolom Status & Last Update akan terisi otomatis.")
         
         daily_input = st.data_editor(
             st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
             on_change=update_daily_state,
             column_config={
                 "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date")
+                "Doc Date": st.column_config.TextColumn("Doc Date"),
+                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
             }
         )
         
@@ -253,16 +258,20 @@ if st.session_state['authenticated']:
             ].copy()
             
             if not clean_new_data.empty:
+                # FORMAT TANGGAL DIUBAH DD-MM-YYYY
+                today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new_data['Status'] = "Outstanding"
+                clean_new_data['Last Update'] = today_str
+                
                 for col in clean_new_data.columns:
                     clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
+                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru ke Dashboard Utama (Tanggal: {today_str})!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
             else:
-                st.warning("⚠️ Tidak ada data baru yang valid untuk dimasukkan (Pastikan PO No terisi).")
+                st.warning("⚠️ Tidak ada data baru yang valid untuk dimasukkan.")
 
 else:
     # --- VIEWER MODE ---
