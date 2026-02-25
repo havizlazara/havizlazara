@@ -59,7 +59,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM (FONT RAKSASA & HEADER) ---
+# --- 4. CSS CUSTOM (FONT & HEADER) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -76,31 +76,18 @@ st.markdown(f"""
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
         background-image: url("data:image/jpeg;base64,{header_bg}");
-        background-size: cover; background-position: center; border: 3px solid #1f4e79;
+        background-size: 100% 100%; /* Menyesuaikan ukuran gambar latar */
+        background-repeat: no-repeat; background-position: center; border: 3px solid #1f4e79;
     }}
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
-    
-    /* Sub-judul Header - Diperbesar */
-    .header-sub {{
-        color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; 
-        text-shadow: 3px 3px 6px black; margin-top: 15px;
-    }}
+    .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
 
-    /* Judul Tab - Raksasa */
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
-    
-    /* Label Filter - Raksasa */
-    .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{
-        font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important;
-    }}
+    .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
 
-    /* JUDUL KOLOM TABEL - RAKSASA */
     [data-testid="stTableColumnHeaderCell"] div {{
-        font-size: 32px !important; 
-        font-weight: 900 !important;
-        color: #1f4e79 !important;
-        padding: 10px 0px !important;
+        font-size: 32px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 10px 0px !important;
     }}
     
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
@@ -118,29 +105,29 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. LOGIKA FILTER (DI LUAR TAB AGAR VIEWER BISA LIHAT) ---
-st.markdown("### 🔍 Filter Monitoring")
-df_f = st.session_state.df_master.copy()
-c1, c2, c3, c4 = st.columns(4)
-f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
-if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
-f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
-if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
-f_unit = c3.multiselect("Unit", options=sorted(df_f['Unit no'].unique()))
-if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
-f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
-if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-
-search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...")
-if search_q:
-    df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
-
-# --- 6. TABS ---
+# --- 5. TABS ---
 if st.session_state['authenticated']:
     tab_monitor, tab_update = st.tabs(["📊 DASHBOARD MONITORING", "🛠️ BULK UPDATE STATUS"])
     
     with tab_monitor:
-        # METRICS & CHARTS (KHUSUS ADMIN)
+        # Filter (Dipindahkan ke dalam Tab agar tidak muncul di Tab Update)
+        st.markdown("### 🔍 Filter Monitoring")
+        df_f = st.session_state.df_master.copy()
+        c1, c2, c3, c4 = st.columns(4)
+        f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
+        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+        f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
+        if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
+        f_unit = c3.multiselect("Unit", options=sorted(df_f['Unit no'].unique()))
+        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
+        f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
+        if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
+
+        search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...")
+        if search_q:
+            df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+
+        # METRICS & CHARTS (Kembali ke ukuran sebelumnya)
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -153,13 +140,13 @@ if st.session_state['authenticated']:
             f_white = dict(family="Arial Black", size=14, color="white")
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig1 = px.pie(df_f, names='PIC', hole=.4, height=250, title="By PIC")
+                fig1 = px.pie(df_f, names='PIC', hole=.4, height=300, title="By PIC")
                 fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with g2:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig2 = px.pie(df_f, names='Status', hole=.4, height=250, title="By Status",
+                fig2 = px.pie(df_f, names='Status', hole=.4, height=300, title="By Status",
                               color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
                 fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
                 st.plotly_chart(fig2, use_container_width=True)
@@ -167,7 +154,7 @@ if st.session_state['authenticated']:
             with g3:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", color='Unit no')
+                fig3 = px.bar(ud, x='Unit no', y='count', height=300, title="Top 5 Units", color='Unit no')
                 fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -221,11 +208,15 @@ if st.session_state['authenticated']:
         if b_manual.button("📝 Apply Manual Input", type="primary"): run_sync(manual=True)
 
 else:
-    # --- TAMPILAN VIEWER ---
-    st.markdown("---")
+    # Tampilan Viewer (Filter Tetap Ada)
+    st.markdown("### 🔍 Filter Monitoring (Viewer)")
+    df_v = st.session_state.df_master.copy()
+    cv1, cv2, cv3, cv4 = st.columns(4)
+    fv_dept = cv1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()), key="v_dept")
+    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
+    # ... (Filter viewer lainnya)
     st.markdown("### 📋 Database Monitoring (View Only)")
-    calc_h_v = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
-    st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h_v)
+    st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
