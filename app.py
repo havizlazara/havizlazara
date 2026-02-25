@@ -16,7 +16,7 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi (Delivery Date dengan D Besar)
+# Urutan kolom resmi
 COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery Date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
 
 if 'daily_df' not in st.session_state:
@@ -32,7 +32,6 @@ def load_data():
     
     data.columns = [str(c).strip() for c in data.columns]
     
-    # Cleaning sisa kolom typo
     for old_col in ['Deliv. Date', 'Delivery date']:
         if old_col in data.columns:
             data = data.drop(columns=[old_col])
@@ -42,7 +41,6 @@ def load_data():
         
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Cleaning nan & format tampilan string agar stabil saat di-load
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
             
@@ -112,13 +110,9 @@ st.markdown(f"""
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
     .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
-    
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
-    
-    [data-testid="stTableColumnHeaderCell"] div {{
-        font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important;
-    }}
+    [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
     .chart-box {{ background-color: white; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; }}
     .stApp {{ background-color: #f1f5f9; }}
@@ -197,11 +191,10 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
-        # Editor Tab Utama tetap pakai kalender agar rapi saat diedit manual
         edited_table = st.data_editor(
             df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor",
             column_config={
-                "Delivery Date": st.column_config.TextColumn("Delivery Date"), # Ubah ke Text agar copas lancar
+                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
                 "Doc Date": st.column_config.TextColumn("Doc Date")
             }
         )
@@ -232,9 +225,8 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Kolom tanggal diset sebagai teks agar copas dari Excel lancar.")
+        st.info("Paste baris baru di sini. Baris tanpa PO No tidak akan dimasukkan.")
         
-        # TAB DAILY: Gunakan TextColumn agar copas tanggal apapun tidak ditolak Streamlit
         daily_input = st.data_editor(
             st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
             on_change=update_daily_state,
@@ -245,10 +237,13 @@ if st.session_state['authenticated']:
         )
         
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
-            clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""].copy()
+            # PERBAIKAN: Hanya ambil data yang PO No nya tidak kosong
+            clean_new_data = st.session_state.daily_df[
+                st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""
+            ].copy()
+            
             if not clean_new_data.empty:
                 clean_new_data['Status'] = "Outstanding"
-                # Pastikan semua kolom jadi string dan bersihkan nan
                 for col in clean_new_data.columns:
                     clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 
@@ -256,6 +251,8 @@ if st.session_state['authenticated']:
                 st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
+            else:
+                st.warning("⚠️ Tidak ada data baru yang valid untuk dimasukkan (Pastikan PO No terisi).")
 
 else:
     # --- VIEWER MODE ---
@@ -267,7 +264,6 @@ else:
     fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
     fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
     
-    # GLOBAL SEARCH VIEWER (DIKEMBALIKAN)
     search_viewer = st.text_input("Global Search:", placeholder="Cari apapun...", key="global_search_viewer")
     
     df_v = df_v_master.copy()
