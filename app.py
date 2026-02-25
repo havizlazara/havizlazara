@@ -15,7 +15,7 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi untuk Daily Update
+# Urutan kolom resmi
 COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
 
 if 'daily_df' not in st.session_state:
@@ -37,7 +37,6 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- FUNGSI UPDATE STATE ---
 def update_bulk_state():
     if "bulk_editor" in st.session_state:
         edits = st.session_state["bulk_editor"]
@@ -54,7 +53,7 @@ def update_daily_state():
         for row in edits.get("added_rows", []):
             st.session_state.daily_df = pd.concat([st.session_state.daily_df, pd.DataFrame([row])], ignore_index=True)
 
-# --- 3. SIDEBAR (LOGIN WITH ENTER) ---
+# --- 3. SIDEBAR (LOGIN) ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -77,7 +76,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM (FONT RAKSASA) ---
+# --- 4. CSS CUSTOM (FONT RAKSASA & HEADER) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -102,7 +101,7 @@ st.markdown(f"""
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important; }}
-    .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
+    .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
     .stApp {{ background-color: #f1f5f9; }}
     </style>
     """, unsafe_allow_html=True)
@@ -115,33 +114,40 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. TABS LOGIC ---
+# --- 5. LOGIKA FILTER (SINKRON UNTUK ADMIN & VIEWER) ---
+st.markdown("### 🔍 Filter Monitoring")
+df_master_current = st.session_state.df_master.copy()
+c1, c2, c3, c4 = st.columns(4)
+f_dept = c1.multiselect("Dept", options=sorted(df_master_current['Dept.'].unique()), key="f_dept")
+f_fleet = c2.multiselect("Fleet", options=sorted(df_master_current['Fleet'].unique()), key="f_fleet")
+f_unit = c3.multiselect("Unit", options=sorted(df_master_current['Unit no'].unique()), key="f_unit")
+f_stat = c4.multiselect("Status", options=sorted(df_master_current['Status'].unique()), key="f_stat")
+
+df_filtered = df_master_current.copy()
+if f_dept: df_filtered = df_filtered[df_filtered['Dept.'].isin(f_dept)]
+if f_fleet: df_filtered = df_filtered[df_filtered['Fleet'].isin(f_fleet)]
+if f_unit: df_filtered = df_filtered[df_filtered['Unit no'].isin(f_unit)]
+if f_stat: df_filtered = df_filtered[df_filtered['Status'].isin(f_stat)]
+
+search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...", key="global_search")
+if search_q:
+    df_filtered = df_filtered[df_filtered.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+
+# --- 6. TABS LOGIC ---
 if st.session_state['authenticated']:
     tab_monitor, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
     
-    # --- TAB 1: MONITORING ---
     with tab_monitor:
-        st.markdown("### 🔍 Filter Monitoring")
-        df_f = st.session_state.df_master.copy()
-        c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
-        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
-        f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
-        if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
-        f_unit = c3.multiselect("Unit", options=sorted(df_f['Unit no'].unique()))
-        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
-        f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
-        if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-
+        # Metrics & Charts
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
-        m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
+        m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_filtered)}</h2></div>', unsafe_allow_html=True)
+        m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_filtered[df_filtered["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_filtered[df_filtered["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
         st.markdown("---")
-        calc_h = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
-        df_ed = df_f.copy()
+        calc_h = min(max((len(df_filtered) + 1) * 35 + 100, 250), 800)
+        df_ed = df_filtered.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
         edited_table = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor")
@@ -153,7 +159,6 @@ if st.session_state['authenticated']:
             st.success("✅ Berhasil Simpan Permanen!")
             st.rerun()
 
-    # --- TAB 2: BULK STATUS ---
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update by PO No & Item")
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
@@ -170,24 +175,14 @@ if st.session_state['authenticated']:
 
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
-        if b3.button("🟢 Set Site"): run_sync("Complete", "Receive at Site")
+        if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
 
-    # --- TAB 3: DAILY UPDATE (NEW) ---
     with tab_daily:
-        st.markdown("### 📅 Daily Update (Full Row Copy-Paste)")
-        st.info("Gunakan format kolom yang sama dengan Dashboard utama.")
-        
-        daily_input = st.data_editor(
-            st.session_state.daily_df, 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key="daily_editor", 
-            on_change=update_daily_state
-        )
+        st.markdown("### 📅 Daily Update (Hanya Update Kolom Berisi)")
+        daily_input = st.data_editor(st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", on_change=update_daily_state)
         
         if st.button("🚀 UPDATE TO MAIN DASHBOARD", type="primary"):
             updated_count = 0
-            # Proses setiap baris di daily_df
             for idx, row in st.session_state.daily_df.iterrows():
                 p_no = str(row['PO No']).strip()
                 p_item = str(row['PO Item']).strip()
@@ -195,25 +190,26 @@ if st.session_state['authenticated']:
                 if p_no != "" and p_item != "":
                     mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
                     if mask.any():
-                        # Update seluruh kolom kecuali PO No dan PO Item (opsional bisa semua)
                         for col in COLUMNS_ORDER:
-                            st.session_state.df_master.loc[mask, col] = str(row[col])
+                            val = str(row[col]).strip()
+                            # LOGIKA: Hanya update jika sel di tab Daily tidak kosong
+                            if val != "":
+                                st.session_state.df_master.loc[mask, col] = val
                         updated_count += 1
             
             if updated_count > 0:
-                st.success(f"✅ Berhasil memperbarui {updated_count} baris di Dashboard Utama!")
-                # Reset tabel daily setelah berhasil
+                st.success(f"✅ Berhasil memperbarui {updated_count} baris! (Hanya sel yang berisi data yang diupdate)")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
             else:
-                st.warning("⚠️ Tidak ada data yang cocok ditemukan (Cek PO No & Item).")
+                st.warning("⚠️ Tidak ada data yang cocok ditemukan.")
 
 else:
-    # VIEWER MODE
-    st.markdown("### 🔍 Filter Monitoring (Viewer)")
-    df_v = st.session_state.df_master.copy()
-    # ... Filter viewer logic
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
+    # --- TAMPILAN VIEWER (TABEL SAJA) ---
+    st.markdown("---")
+    st.markdown("### 📋 Database Monitoring (View Only)")
+    calc_h_v = min(max((len(df_filtered) + 1) * 35 + 100, 250), 800)
+    st.dataframe(df_filtered, use_container_width=True, hide_index=True, height=calc_h_v)
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
