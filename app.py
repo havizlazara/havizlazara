@@ -31,7 +31,6 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# Fungsi Sinkronisasi Bulk Update
 def update_bulk_state():
     if "bulk_editor_sync" in st.session_state:
         edits = st.session_state["bulk_editor_sync"]
@@ -72,7 +71,6 @@ logo_img = get_base64_image("NHM.jpg")
 
 st.markdown(f"""
     <style>
-    /* Header Background */
     .custom-header {{
         position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
@@ -82,6 +80,12 @@ st.markdown(f"""
     }}
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
+    
+    /* Sub-judul Header - Diperbesar */
+    .header-sub {{
+        color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; 
+        text-shadow: 3px 3px 6px black; margin-top: 15px;
+    }}
 
     /* Judul Tab - Raksasa */
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
@@ -91,9 +95,9 @@ st.markdown(f"""
         font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important;
     }}
 
-    /* JUDUL KOLOM TABEL - RAKSASA (2x Lebih Besar) */
+    /* JUDUL KOLOM TABEL - RAKSASA */
     [data-testid="stTableColumnHeaderCell"] div {{
-        font-size: 32px !important; /* Ukuran font judul kolom ditingkatkan signifikan */
+        font-size: 32px !important; 
         font-weight: 900 !important;
         color: #1f4e79 !important;
         padding: 10px 0px !important;
@@ -109,35 +113,34 @@ st.markdown(f"""
 st.markdown(f"""
     <div class="custom-header">
         <div class="logo-container"><img src="data:image/jpeg;base64,{logo_img}" style="height:100px;"></div>
-        <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
-        <h2 style="color:white; font-size: 25px; letter-spacing:5px; text-shadow: 2px 2px 4px black;">NHM SUPPLY CHAIN & LOGISTICS</h2>
+        <br><h1 class="giant-title">Purchase Order Monitoring</h1>
+        <div class="header-sub">NHM SUPPLY CHAIN & LOGISTICS</div>
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. TABS ---
+# --- 5. LOGIKA FILTER (DI LUAR TAB AGAR VIEWER BISA LIHAT) ---
+st.markdown("### 🔍 Filter Monitoring")
+df_f = st.session_state.df_master.copy()
+c1, c2, c3, c4 = st.columns(4)
+f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
+if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
+if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
+f_unit = c3.multiselect("Unit", options=sorted(df_f['Unit no'].unique()))
+if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
+f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
+if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
+
+search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...")
+if search_q:
+    df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+
+# --- 6. TABS ---
 if st.session_state['authenticated']:
     tab_monitor, tab_update = st.tabs(["📊 DASHBOARD MONITORING", "🛠️ BULK UPDATE STATUS"])
     
-    # --- TAB MONITORING (LOGIN ONLY) ---
     with tab_monitor:
-        st.markdown("### 🔍 Filter Monitoring")
-        df_f = st.session_state.df_master.copy()
-        
-        c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()))
-        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
-        f_fleet = c2.multiselect("Fleet", options=sorted(df_f['Fleet'].unique()))
-        if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
-        f_unit = c3.multiselect("Unit", options=sorted(df_f['Unit no'].unique()))
-        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
-        f_stat = c4.multiselect("Status", options=sorted(df_f['Status'].unique()))
-        if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-
-        search_q = st.text_input("Global Search:", placeholder="Ketik di sini...")
-        if search_q:
-            df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
-
-        # METRICS & CHARTS (Dimasukkan ke dalam blok Login)
+        # METRICS & CHARTS (KHUSUS ADMIN)
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -152,7 +155,6 @@ if st.session_state['authenticated']:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 fig1 = px.pie(df_f, names='PIC', hole=.4, height=250, title="By PIC")
                 fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with g2:
@@ -160,7 +162,6 @@ if st.session_state['authenticated']:
                 fig2 = px.pie(df_f, names='Status', hole=.4, height=250, title="By Status",
                               color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
                 fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
                 st.plotly_chart(fig2, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with g3:
@@ -168,7 +169,6 @@ if st.session_state['authenticated']:
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
                 fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", color='Unit no')
                 fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
-                fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -194,11 +194,9 @@ if st.session_state['authenticated']:
             st.success("✅ Berhasil Simpan & Reset!")
             st.rerun()
 
-    # --- TAB UPDATE (LOGIN ONLY) ---
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_sync", on_change=update_bulk_state)
-        
         b1, b2, b3, b_manual = st.columns(4)
         clean_in = st.session_state.bulk_df[(st.session_state.bulk_df['PO No'].str.strip() != "") & (st.session_state.bulk_df['PO Item'].str.strip() != "")]
         
@@ -223,11 +221,13 @@ if st.session_state['authenticated']:
         if b_manual.button("📝 Apply Manual Input", type="primary"): run_sync(manual=True)
 
 else:
-    # Tampilan Viewer (Hanya Tabel)
-    st.markdown("### 🔍 Database Monitoring (View Only)")
-    st.dataframe(st.session_state.df_master, use_container_width=True, hide_index=True, height=600)
+    # --- TAMPILAN VIEWER ---
+    st.markdown("---")
+    st.markdown("### 📋 Database Monitoring (View Only)")
+    calc_h_v = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
+    st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h_v)
 
-# --- 9. EXPORT ---
+# --- EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     st.session_state.df_master.to_excel(wr, index=False)
