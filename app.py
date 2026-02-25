@@ -10,12 +10,10 @@ import base64
 # --- 1. CONFIG & SESSION STATE ---
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
-# Inisialisasi Session State agar stabil
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'show_complete_options' not in st.session_state:
     st.session_state['show_complete_options'] = False
-# Inisialisasi Tabel Bulk Update dengan data kosong
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
@@ -27,7 +25,6 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'])
     
-    # Normalisasi Kolom
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
@@ -36,7 +33,6 @@ def load_data():
             
     return data
 
-# Load data ke session master
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -48,7 +44,6 @@ with st.sidebar:
         if st.button("Login"):
             if admin_pw == "nhm123":
                 st.session_state['authenticated'] = True
-                # Tarik data ulang saat login agar Chart muncul
                 st.session_state.df_master = load_data()
                 st.rerun()
             else: st.error("Password Salah")
@@ -104,7 +99,6 @@ else:
 
 # --- TAB MONITORING ---
 with tab_monitor:
-    # Filter
     st.markdown("### 🔍 Filter & Search")
     df_f = st.session_state.df_master.copy()
     c1, c2, c3, c4 = st.columns(4)
@@ -121,7 +115,6 @@ with tab_monitor:
     if search_q:
         df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-    # --- KUNCI: INFO & GRAFIK HANYA UNTUK ADMIN ---
     if st.session_state['authenticated']:
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
@@ -157,7 +150,6 @@ with tab_monitor:
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # Database
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring")
     calc_h = min(max((len(df_f) + 1) * 35 + 45, 250), 800)
@@ -173,7 +165,6 @@ with tab_monitor:
 
         edited_table = st.data_editor(df_ed.style.apply(apply_style, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="main_editor_v2")
         
-        # SINKRONISASI ANTI-RESET:
         if not edited_table.equals(df_ed):
             for _, row in edited_table.iterrows():
                 mask = (st.session_state.df_master['PO No'] == row['PO No']) & (st.session_state.df_master['PO Item'] == row['PO Item'])
@@ -183,23 +174,24 @@ with tab_monitor:
         st.write("🔧 **Quick Actions:**")
         a1, a2 = st.columns([1, 4])
         if a1.button("💾 SAVE TO GSHEET", type="primary"):
-            final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            conn.update(data=final_save)
-            # RESET TAB BULK UPDATE SETELAH SAVE
-            st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
-            st.cache_data.clear()
-            st.success("Tersimpan & Tab Update Berhasil Direset!")
-            st.rerun()
+            with st.spinner('Sedang menyimpan data ke Google Sheets...'):
+                final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
+                conn.update(data=final_save)
+                st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
+                st.cache_data.clear()
+                st.success("✅ BERHASIL! Data telah diperbarui di Google Sheets dan Tab Bulk Update telah di-reset.")
+            # st.rerun() # Dihilangkan agar pesan success tetap terlihat sejenak
+
     else:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE (SINKRONISASI & AUTO-RESET) ---
+# --- TAB UPDATE ---
 if tab_update:
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status & Delivery Note")
         
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_sync")
-        st.session_state.bulk_df = input_bulk # Simpan perubahan ketikan ke session
+        st.session_state.bulk_df = input_bulk
 
         st.write("⚙️ **Aksi Pemrosesan:**")
         b1, b2, b3, b_manual = st.columns(4)
@@ -218,9 +210,12 @@ if tab_update:
                     updated += 1
             st.session_state.bulk_df = new_view
             if updated > 0:
-                st.success(f"Berhasil update {updated} baris. Data sudah muncul di tabel atas. JANGAN LUPA KLIK SAVE DI DASHBOARD.")
+                if manual:
+                    st.success(f"✅ MANUAL UPDATE BERHASIL! {updated} baris telah diperbarui di tabel. Jangan lupa klik 'SAVE TO GSHEET' di Dashboard.")
+                else:
+                    st.success(f"✅ BULK UPDATE BERHASIL! {updated} baris telah disinkronkan. Jangan lupa klik 'SAVE TO GSHEET' di Dashboard.")
                 st.rerun()
-            else: st.warning("PO tidak ditemukan.")
+            else: st.warning("⚠️ Data tidak ditemukan. Periksa kembali PO No dan Item.")
 
         if b1.button("🔴 Bulk Outstanding"): run_sync("Outstanding", "")
         if b2.button("🟢 Bulk Bitung"): run_sync("Complete", "Receive at Bitung")
