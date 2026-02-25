@@ -122,16 +122,13 @@ with tab_monitor:
     if search_q:
         df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-    # --- KUNCI: HANYA TAMPIL JIKA LOGIN ---
     if st.session_state['authenticated']:
-        # Metrics
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-        # Charts
         if not df_f.empty:
             st.write("")
             g1, g2, g3 = st.columns(3)
@@ -160,7 +157,6 @@ with tab_monitor:
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
     
-    # Database Table
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring")
     calc_h = min(max((len(df_f) + 1) * 35 + 45, 250), 800)
@@ -176,7 +172,6 @@ with tab_monitor:
 
         res_ed = st.data_editor(df_ed.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="editor_auth")
         
-        # Action Buttons
         sel_idx = res_ed[res_ed['Pilih'] == True].index
         st.write("🔧 **Admin Quick Actions:**")
         a1, a2, a3, a4 = st.columns([1,1,1,2])
@@ -199,28 +194,31 @@ with tab_monitor:
         if st.session_state.show_complete_options:
             st.info("📍 Pilih lokasi penerimaan:")
             cb1, cb2 = st.columns(2)
-            if cb1.button("Receive on Bitung"):
-                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive on Bitung"]
+            if cb1.button("Receive at Bitung"):
+                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive at Bitung"]
                 st.session_state.show_complete_options = False
                 st.rerun()
-            if cb2.button("Receive on Site"):
-                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive on Site"]
+            if cb2.button("Receive at Site"):
+                st.session_state.df_master.loc[st.session_state.targets, ['Status', 'Delivery Note']] = ["Complete", "Receive at Site"]
                 st.session_state.show_complete_options = False
                 st.rerun()
     else:
-        # Tampilan untuk Viewer (Tabel Saja)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE (HANYA UNTUK ADMIN) ---
+# --- TAB UPDATE (LOGIKA BULK BITUNG & SITE) ---
 if tab_update:
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status & Delivery Note")
+        st.write("Isi PO No dan PO Item, lalu klik tombol Bulk untuk update otomatis.")
+        
         if 'bulk_df' not in st.session_state: 
             st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
         
         bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_auth")
         
+        st.write("⚙️ **Aksi Pemrosesan:**")
         b1, b2, b3, b_manual = st.columns(4)
+        
         clean_in = bulk_input[(bulk_input['PO No'].astype(str).str.strip() != "") & (bulk_input['PO Item'].astype(str).str.strip() != "")]
         
         def process_bulk(stat=None, dn=None, use_manual=False):
@@ -238,11 +236,11 @@ if tab_update:
             else: st.warning("Data tidak ditemukan.")
 
         if b1.button("🔴 Bulk Outstanding"): process_bulk("Outstanding", "")
-        if b2.button("🟢 Bulk Bitung"): process_bulk("Complete", "Receive on Bitung")
-        if b3.button("🟢 Bulk Site"): process_bulk("Complete", "Receive on Site")
+        if b2.button("🟢 Bulk Bitung"): process_bulk("Complete", "Receive at Bitung")
+        if b3.button("🟢 Bulk Site"): process_bulk("Complete", "Receive at Site")
         if b_manual.button("📝 Apply Manual Input", type="primary"): process_bulk(use_manual=True)
 
-# --- EXPORT ( viewer tetap bisa download data mentah ) ---
+# --- EXPORT ---
 ex_buf = io.BytesIO()
 with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr:
     st.session_state.df_master.to_excel(wr, index=False)
