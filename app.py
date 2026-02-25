@@ -14,6 +14,8 @@ if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'show_complete_options' not in st.session_state:
     st.session_state['show_complete_options'] = False
+
+# Inisialisasi awal untuk tabel bulk agar stabil
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
@@ -35,6 +37,21 @@ def load_data():
 
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
+
+# --- FUNGSI BARU: PENYIMPANAN DATA COPAS ---
+def update_bulk_state():
+    # Mengambil data terbaru dari widget editor dan menyimpannya ke session state
+    if "bulk_editor_sync" in st.session_state:
+        # Menghandle data yang diedit/ditambah/dihapus
+        edits = st.session_state["bulk_editor_sync"]
+        # Logika internal Streamlit untuk sinkronisasi state
+        for row_idx, values in edits.get("edited_rows", {}).items():
+            for key, val in values.items():
+                st.session_state.bulk_df.at[int(row_idx), key] = val
+        
+        # Jika ada baris baru yang ditambahkan
+        for row in edits.get("added_rows", []):
+            st.session_state.bulk_df = pd.concat([st.session_state.bulk_df, pd.DataFrame([row])], ignore_index=True)
 
 # --- 3. SIDEBAR ---
 with st.sidebar:
@@ -122,34 +139,6 @@ with tab_monitor:
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-        if not df_f.empty:
-            st.write("")
-            g1, g2, g3 = st.columns(3)
-            f_white = dict(family="Arial Black", size=14, color="white")
-            with g1:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig1 = px.pie(df_f, names='PIC', hole=.4, height=250, title="By PIC")
-                fig1.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig1, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with g2:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                fig2 = px.pie(df_f, names='Status', hole=.4, height=250, title="By Status",
-                              color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-                fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
-                fig2.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig2, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with g3:
-                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='Unit no', y='count', height=250, title="Top 5 Units", color='Unit no')
-                fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
-                fig3.update_layout(showlegend=False, yaxis_visible=False, margin=dict(t=35,b=5,l=5,r=5))
-                st.plotly_chart(fig3, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring")
     calc_h = min(max((len(df_f) + 1) * 35 + 45, 250), 800)
@@ -174,28 +163,37 @@ with tab_monitor:
         st.write("🔧 **Quick Actions:**")
         a1, a2 = st.columns([1, 4])
         if a1.button("💾 SAVE TO GSHEET", type="primary"):
-            with st.spinner('Sedang menyimpan data ke Google Sheets...'):
+            with st.spinner('Menyimpan ke GSheet...'):
                 final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
                 conn.update(data=final_save)
+                # Reset bulk_df
                 st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
                 st.cache_data.clear()
-                st.success("✅ BERHASIL! Data telah diperbarui di Google Sheets dan Tab Bulk Update telah di-reset.")
-            # st.rerun() # Dihilangkan agar pesan success tetap terlihat sejenak
+                st.success("✅ Berhasil Simpan & Reset!")
+            st.rerun()
 
     else:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE ---
+# --- TAB UPDATE (PERBAIKAN COPAS) ---
 if tab_update:
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status & Delivery Note")
         
-        input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_sync")
-        st.session_state.bulk_df = input_bulk
+        # Menggunakan on_change agar copas langsung tersimpan di memori
+        input_bulk = st.data_editor(
+            st.session_state.bulk_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="bulk_editor_sync",
+            on_change=update_bulk_state 
+        )
 
         st.write("⚙️ **Aksi Pemrosesan:**")
         b1, b2, b3, b_manual = st.columns(4)
-        clean_in = input_bulk[(input_bulk['PO No'].str.strip() != "") & (input_bulk['PO Item'].str.strip() != "")]
+        
+        # Validasi data input
+        clean_in = st.session_state.bulk_df[(st.session_state.bulk_df['PO No'].str.strip() != "") & (st.session_state.bulk_df['PO Item'].str.strip() != "")]
         
         def run_sync(stat=None, dn=None, manual=False):
             updated = 0
@@ -208,14 +206,12 @@ if tab_update:
                     st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [t_stat, t_dn]
                     new_view.loc[idx, ['Status', 'Delivery Note']] = [t_stat, t_dn]
                     updated += 1
+            
             st.session_state.bulk_df = new_view
             if updated > 0:
-                if manual:
-                    st.success(f"✅ MANUAL UPDATE BERHASIL! {updated} baris telah diperbarui di tabel. Jangan lupa klik 'SAVE TO GSHEET' di Dashboard.")
-                else:
-                    st.success(f"✅ BULK UPDATE BERHASIL! {updated} baris telah disinkronkan. Jangan lupa klik 'SAVE TO GSHEET' di Dashboard.")
+                st.success(f"✅ Berhasil update {updated} baris! Jangan lupa klik 'SAVE TO GSHEET' di Dashboard.")
                 st.rerun()
-            else: st.warning("⚠️ Data tidak ditemukan. Periksa kembali PO No dan Item.")
+            else: st.warning("⚠️ Data tidak ditemukan.")
 
         if b1.button("🔴 Bulk Outstanding"): run_sync("Outstanding", "")
         if b2.button("🟢 Bulk Bitung"): run_sync("Complete", "Receive at Bitung")
