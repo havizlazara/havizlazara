@@ -57,12 +57,17 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
+# FUNGSI PERBAIKAN COPAS: Menangkap perubahan secara instan
 def update_bulk_state():
     if "bulk_editor" in st.session_state:
         edits = st.session_state["bulk_editor"]
+        # Update baris yang diedit/di-paste
         for row_idx, values in edits.get("edited_rows", {}).items():
             for key, val in values.items():
                 st.session_state.bulk_df.at[int(row_idx), key] = val
+        # Tambahkan baris baru jika ada
+        for row in edits.get("added_rows", []):
+            st.session_state.bulk_df = pd.concat([st.session_state.bulk_df, pd.DataFrame([row])], ignore_index=True)
 
 def update_daily_state():
     if "daily_editor" in st.session_state:
@@ -163,7 +168,6 @@ if st.session_state['authenticated']:
         if search_q:
             df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-        # METRICS & CHARTS
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -217,22 +221,37 @@ if st.session_state['authenticated']:
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
-        input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
+        # Menggunakan on_change agar data copas tidak hilang
+        input_bulk = st.data_editor(
+            st.session_state.bulk_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="bulk_editor", 
+            on_change=update_bulk_state
+        )
         b1, b2, b3, b4 = st.columns(4)
         
         def run_bulk(stat=None, dn=None, manual=False):
             updated = 0
-            # FORMAT TANGGAL DIUBAH DD-MM-YYYY
             today_str = datetime.now().strftime("%d-%m-%Y")
+            # Gunakan data langsung dari editor agar sinkron
             for _, r in st.session_state.bulk_df.iterrows():
-                mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
-                if mask.any() and str(r['PO No']).strip() != "":
+                p_no = str(r['PO No']).strip()
+                p_item = str(r['PO Item']).strip()
+                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
+                
+                if mask.any() and p_no != "":
                     t_stat = str(r['Status']) if manual else stat
                     t_dn = str(r['Delivery Note']) if manual else dn
                     st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [t_stat, t_dn, today_str]
                     updated += 1
-            st.success(f"✅ Diperbarui {updated} baris di Memori (Tanggal Update: {today_str}).")
-        
+            
+            if updated > 0:
+                st.success(f"✅ Diperbarui {updated} baris di Dashboard Utama!")
+                st.rerun() # Otomatis update tampilan Dashboard
+            else:
+                st.warning("⚠️ Tidak ada PO yang cocok ditemukan.")
+
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
         if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
@@ -240,8 +259,6 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Kolom Status & Last Update akan terisi otomatis.")
-        
         daily_input = st.data_editor(
             st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
             on_change=update_daily_state,
@@ -258,7 +275,6 @@ if st.session_state['authenticated']:
             ].copy()
             
             if not clean_new_data.empty:
-                # FORMAT TANGGAL DIUBAH DD-MM-YYYY
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new_data['Status'] = "Outstanding"
                 clean_new_data['Last Update'] = today_str
@@ -267,11 +283,9 @@ if st.session_state['authenticated']:
                     clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru ke Dashboard Utama (Tanggal: {today_str})!")
+                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
-            else:
-                st.warning("⚠️ Tidak ada data baru yang valid untuk dimasukkan.")
 
 else:
     # --- VIEWER MODE ---
