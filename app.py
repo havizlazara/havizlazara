@@ -16,8 +16,12 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi
-COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery Date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
+# Urutan kolom resmi (PR No & PR Item ditambahkan di antara Resv dan Material)
+COLUMNS_ORDER = [
+    'Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 
+    'PR No', 'PR Item', # Kolom Baru
+    'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'
+]
 
 if 'daily_df' not in st.session_state:
     st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
@@ -32,14 +36,20 @@ def load_data():
     
     data.columns = [str(c).strip() for c in data.columns]
     
+    # Cleaning sisa kolom typo lama
     for old_col in ['Deliv. Date', 'Delivery date']:
         if old_col in data.columns:
             data = data.drop(columns=[old_col])
             
-    if 'Delivery Date' not in data.columns:
-        data['Delivery Date'] = ""
-        
+    # Pastikan semua kolom baru ada di dataframe master
+    for col in COLUMNS_ORDER:
+        if col not in data.columns:
+            data[col] = ""
+            
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
+    
+    # Sorting kolom sesuai urutan COLUMNS_ORDER
+    data = data[COLUMNS_ORDER]
     
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
@@ -191,6 +201,7 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
+        # Dashboard utama dengan kolom PR
         edited_table = st.data_editor(
             df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor",
             column_config={
@@ -225,7 +236,7 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Baris tanpa PO No tidak akan dimasukkan.")
+        st.info("Paste baris baru di sini. Kolom PR No dan PR Item sudah tersedia.")
         
         daily_input = st.data_editor(
             st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
@@ -237,7 +248,6 @@ if st.session_state['authenticated']:
         )
         
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
-            # PERBAIKAN: Hanya ambil data yang PO No nya tidak kosong
             clean_new_data = st.session_state.daily_df[
                 st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""
             ].copy()
