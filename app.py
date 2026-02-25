@@ -16,7 +16,7 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi (Judul diseragamkan: Delivery Date)
+# Urutan kolom resmi (Delivery Date dengan D Besar)
 COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery Date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
 
 if 'daily_df' not in st.session_state:
@@ -32,22 +32,19 @@ def load_data():
     
     data.columns = [str(c).strip() for c in data.columns]
     
-    # Hapus kolom lama jika masih ada sisa-sisa typo
+    # Cleaning sisa kolom typo
     for old_col in ['Deliv. Date', 'Delivery date']:
         if old_col in data.columns:
             data = data.drop(columns=[old_col])
             
     if 'Delivery Date' not in data.columns:
-        data['Delivery Date'] = None
+        data['Delivery Date'] = ""
         
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Cleaning nan & Konversi Tanggal
+    # Cleaning nan & format tampilan string agar stabil saat di-load
     for col in data.columns:
-        if 'Date' in col:
-            data[col] = pd.to_datetime(data[col], errors='coerce').dt.date
-        else:
-            data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
+        data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
             
     return data
 
@@ -141,7 +138,6 @@ if st.session_state['authenticated']:
     tab_monitor, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
     
     with tab_monitor:
-        # FILTER MONITORING (POSISI DI BAWAH TAB)
         st.markdown("### 🔍 Filter Monitoring")
         df_master_cur = st.session_state.df_master.copy()
         
@@ -161,7 +157,7 @@ if st.session_state['authenticated']:
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
 
-        search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...", key="global_search")
+        search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...", key="global_search_admin")
         if search_q:
             df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
@@ -201,18 +197,17 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
+        # Editor Tab Utama tetap pakai kalender agar rapi saat diedit manual
         edited_table = st.data_editor(
             df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor",
             column_config={
-                "Delivery Date": st.column_config.DateColumn("Delivery Date", format="YYYY-MM-DD"),
-                "Doc Date": st.column_config.DateColumn("Doc Date", format="YYYY-MM-DD")
+                "Delivery Date": st.column_config.TextColumn("Delivery Date"), # Ubah ke Text agar copas lancar
+                "Doc Date": st.column_config.TextColumn("Doc Date")
             }
         )
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            for col in ['Delivery Date', 'Doc Date']:
-                final_save[col] = final_save[col].astype(str).replace("NaT", "").replace("None", "").replace("<NA>", "")
             conn.update(data=final_save)
             st.cache_data.clear()
             st.success("✅ Berhasil Simpan Permanen!")
@@ -237,17 +232,15 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Kolom 'Status' otomatis terisi 'Outstanding'.")
-        df_daily_ready = st.session_state.daily_df.copy()
-        for col in ['Delivery Date', 'Doc Date']:
-            df_daily_ready[col] = pd.to_datetime(df_daily_ready[col], errors='coerce').dt.date
-
+        st.info("Paste baris baru di sini. Kolom tanggal diset sebagai teks agar copas dari Excel lancar.")
+        
+        # TAB DAILY: Gunakan TextColumn agar copas tanggal apapun tidak ditolak Streamlit
         daily_input = st.data_editor(
-            df_daily_ready, num_rows="dynamic", use_container_width=True, key="daily_editor", 
+            st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
             on_change=update_daily_state,
             column_config={
-                "Delivery Date": st.column_config.DateColumn("Delivery Date", format="YYYY-MM-DD"),
-                "Doc Date": st.column_config.DateColumn("Doc Date", format="YYYY-MM-DD")
+                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
+                "Doc Date": st.column_config.TextColumn("Doc Date")
             }
         )
         
@@ -255,11 +248,10 @@ if st.session_state['authenticated']:
             clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
                 clean_new_data['Status'] = "Outstanding"
+                # Pastikan semua kolom jadi string dan bersihkan nan
                 for col in clean_new_data.columns:
-                    if 'Date' in col:
-                        clean_new_data[col] = pd.to_datetime(clean_new_data[col], errors='coerce').dt.date
-                    else:
-                        clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
+                    clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
+                
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
                 st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
@@ -274,11 +266,20 @@ else:
     fv_fleet = cv2.multiselect("Fleet", options=sorted([str(x) for x in df_v_master['Fleet'].unique() if x]), key="v_fleet")
     fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
     fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
+    
+    # GLOBAL SEARCH VIEWER (DIKEMBALIKAN)
+    search_viewer = st.text_input("Global Search:", placeholder="Cari apapun...", key="global_search_viewer")
+    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
+    if search_viewer:
+        df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+
+    st.markdown("---")
+    st.markdown("### 📋 Database Monitoring (View Only)")
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
 
 # --- EXPORT ---
