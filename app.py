@@ -6,6 +6,7 @@ import os
 import plotly.express as px
 import plotly.graph_objects as go
 import base64
+from datetime import datetime
 
 # --- 1. CONFIG & SESSION STATE ---
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
@@ -29,23 +30,19 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
     
-    # Cleaning Nama Kolom
     data.columns = [str(c).strip() for c in data.columns]
-    
-    # Hapus kolom lama jika masih ada
-    if 'Deliv. Date' in data.columns:
-        data = data.drop(columns=['Deliv. Date'])
-    
-    # Pastikan kolom baru ada
-    if 'Delivery date' not in data.columns:
-        data['Delivery date'] = ""
-        
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Pembersihan nan menjadi kosong & Format Tanggal
+    if 'Deliv. Date' in data.columns:
+        data = data.drop(columns=['Deliv. Date'])
+    if 'Delivery date' not in data.columns:
+        data['Delivery date'] = None
+        
+    # MEMBERSIHKAN DATA & FIX TYPE COMPATIBILITY
     for col in data.columns:
         if 'date' in col.lower() or 'Date' in col:
-            data[col] = pd.to_datetime(data[col], errors='coerce').dt.strftime('%Y-%m-%d').fillna("")
+            # Ubah string ke datetime, lalu ke date object agar kompatibel dengan DateColumn
+            data[col] = pd.to_datetime(data[col], errors='coerce').dt.date
         else:
             data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
             
@@ -54,7 +51,6 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# Fungsi Sinkronisasi State
 def update_bulk_state():
     if "bulk_editor" in st.session_state:
         edits = st.session_state["bulk_editor"]
@@ -95,7 +91,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM (FONT RAKSASA & HEADER) ---
+# --- 4. CSS CUSTOM ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -134,13 +130,13 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. LOGIKA FILTER (DI LUAR TAB AGAR VIEWER BISA LIHAT) ---
+# --- 5. LOGIKA FILTER (SINKRON) ---
 st.markdown("### 🔍 Filter Monitoring")
 df_master_cur = st.session_state.df_master.copy()
 
 def get_options(col_name):
-    unique_vals = df_master_cur[col_name].unique()
-    return sorted([str(x) for x in unique_vals if x and str(x).strip() != "" and str(x).lower() != 'nan'])
+    unique_vals = df_master_cur[col_name].dropna().unique()
+    return sorted([str(x) for x in unique_vals if str(x).strip() != "" and str(x).lower() != 'nan'])
 
 c1, c2, c3, c4 = st.columns(4)
 f_dept = c1.multiselect("Dept", options=get_options('Dept.'), key="f_dept")
@@ -163,7 +159,7 @@ if st.session_state['authenticated']:
     tab_monitor, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
     
     with tab_monitor:
-        # METRICS & CHARTS
+        # Metrics & Charts
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -175,7 +171,6 @@ if st.session_state['authenticated']:
             g1, g2, g3 = st.columns(3)
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                # FIX VALUEERROR: Mendefinisikan kolom secara eksplisit
                 pic_c = df_f['PIC'].value_counts().reset_index()
                 pic_c.columns = ['PIC_Name', 'Total_Count']
                 fig1 = px.bar(pic_c, x='PIC_Name', y='Total_Count', color='PIC_Name', height=380, title="Monitoring by PIC", text='Total_Count')
@@ -197,7 +192,13 @@ if st.session_state['authenticated']:
 
         st.markdown("---")
         calc_h = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
+        
+        # PERBAIKAN TYPE COMPATIBILITY: Pastikan kolom tanggal adalah Date Object sebelum masuk editor
         df_ed = df_f.copy()
+        for col in ['Delivery date', 'Doc Date']:
+            if col in df_ed.columns:
+                df_ed[col] = pd.to_datetime(df_ed[col], errors='coerce').dt.date
+
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
         edited_table = st.data_editor(
@@ -214,6 +215,10 @@ if st.session_state['authenticated']:
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
+            # Kembalikan format tanggal ke string sebelum kirim ke GSheets
+            for col in ['Delivery date', 'Doc Date']:
+                final_save[col] = final_save[col].astype(str).replace("NaT", "").replace("None", "")
+            
             conn.update(data=final_save)
             st.cache_data.clear()
             st.success("✅ Berhasil Simpan Permanen!")
@@ -229,11 +234,9 @@ if st.session_state['authenticated']:
             for _, r in st.session_state.bulk_df.iterrows():
                 mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
                 if mask.any() and str(r['PO No']).strip() != "":
-                    t_stat = str(r['Status']) if manual else stat
-                    t_dn = str(r['Delivery Note']) if manual else dn
-                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [t_stat, t_dn]
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
                     updated += 1
-            st.success(f"✅ Diperbarui {updated} baris di Memori. Klik Save di Dashboard untuk simpan.")
+            st.success(f"✅ Diperbarui {updated} baris di Memori.")
 
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
@@ -243,31 +246,45 @@ if st.session_state['authenticated']:
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
         st.info("Paste baris baru di sini. Kolom 'Status' otomatis terisi 'Outstanding'.")
-        daily_input = st.data_editor(st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", on_change=update_daily_state)
+        
+        # Inisialisasi daily_df di editor sebagai Date Object agar tidak error saat diedit
+        df_daily_ready = st.session_state.daily_df.copy()
+        for col in ['Delivery date', 'Doc Date']:
+            df_daily_ready[col] = pd.to_datetime(df_daily_ready[col], errors='coerce').dt.date
+
+        daily_input = st.data_editor(
+            df_daily_ready, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="daily_editor", 
+            on_change=update_daily_state,
+            column_config={
+                "Delivery date": st.column_config.DateColumn("Delivery date", format="YYYY-MM-DD"),
+                "Doc Date": st.column_config.DateColumn("Doc Date", format="YYYY-MM-DD")
+            }
+        )
         
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
             clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
-                # OTOMATISASI STATUS
                 clean_new_data['Status'] = "Outstanding"
-                
-                # Sinkronisasi tipe data & hapus nan
+                # Konversi kolom tanggal ke string agar seragam dengan database master
                 for col in clean_new_data.columns:
-                    clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
+                    if 'date' in col.lower() or 'Date' in col:
+                        clean_new_data[col] = pd.to_datetime(clean_new_data[col], errors='coerce').dt.strftime('%Y-%m-%d').fillna("")
+                    else:
+                        clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
                 st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
-            else:
-                st.warning("⚠️ Tidak ada data baru untuk dimasukkan.")
 
 else:
     # --- VIEWER MODE ---
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring (View Only)")
-    calc_h_v = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
-    st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h_v)
+    st.dataframe(df_f, use_container_width=True, hide_index=True, height=600)
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
