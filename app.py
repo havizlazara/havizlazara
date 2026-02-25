@@ -15,8 +15,8 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi
-COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
+# Urutan kolom resmi (Deliv. Date dihapus, ganti Delivery date)
+COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
 
 if 'daily_df' not in st.session_state:
     st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
@@ -28,10 +28,28 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
+    
+    # Cleaning Nama Kolom
     data.columns = [str(c).strip() for c in data.columns]
+    
+    # Hapus kolom lama jika masih ada
+    if 'Deliv. Date' in data.columns:
+        data = data.drop(columns=['Deliv. Date'])
+    
+    # Pastikan kolom baru ada
+    if 'Delivery date' not in data.columns:
+        data['Delivery date'] = ""
+        
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
+    
+    # Pembersihan nan menjadi kosong
     for col in data.columns:
-        data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
+        # Jika kolom tanggal, coba ubah ke format date
+        if 'date' in col.lower() or 'Date' in col:
+            data[col] = pd.to_datetime(data[col], errors='coerce').dt.strftime('%Y-%m-%d').fillna("")
+        else:
+            data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
+            
     return data
 
 if 'df_master' not in st.session_state:
@@ -125,7 +143,6 @@ if st.session_state['authenticated']:
         st.markdown("### 🔍 Filter Monitoring")
         df_master_cur = st.session_state.df_master.copy()
         
-        # Perbaikan TypeError pada Sorted: Mengonversi ke String dan membersihkan nilai kosong
         def get_options(col_name):
             unique_vals = df_master_cur[col_name].unique()
             return sorted([str(x) for x in unique_vals if x and str(x).strip() != ""])
@@ -159,7 +176,7 @@ if st.session_state['authenticated']:
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 pic_c = df_f['PIC'].value_counts().reset_index()
-                fig1 = px.bar(pic_c, x='PIC', y='count', color='PIC', height=380, title="Monitoring by PIC", text='count')
+                fig1 = px.bar(pic_c, x='index', y='PIC', color='index', height=380, title="Monitoring by PIC", text='PIC')
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with g2:
@@ -171,7 +188,7 @@ if st.session_state['authenticated']:
             with g3:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='Unit no', y='count', height=380, title="Top 5 Units", color='Unit no')
+                fig3 = px.bar(ud, x='index', y='Unit no', height=380, title="Top 5 Units", color='index')
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -180,7 +197,18 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
-        edited_table = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor")
+        # Konfigurasi kolom untuk tipe tanggal
+        edited_table = st.data_editor(
+            df_ed, 
+            use_container_width=True, 
+            hide_index=True, 
+            height=calc_h, 
+            key="main_editor",
+            column_config={
+                "Delivery date": st.column_config.DateColumn("Delivery date", format="YYYY-MM-DD"),
+                "Doc Date": st.column_config.DateColumn("Doc Date", format="YYYY-MM-DD")
+            }
+        )
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
@@ -192,8 +220,7 @@ if st.session_state['authenticated']:
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
-        
-        b1, b2, b3, b4 = st.columns(4) # Menambahkan kolom ke-4 untuk tombol manual
+        b1, b2, b3, b4 = st.columns(4)
         
         def run_bulk(stat=None, dn=None, manual=False):
             updated = 0
@@ -208,23 +235,26 @@ if st.session_state['authenticated']:
 
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
-        if b3.button("🟢 Set Site"): run_sync("Complete", "Receive at Site")
-        if b4.button("📝 Manual Input", type="primary"): run_bulk(manual=True) # Tombol Manual dimunculkan kembali
+        if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
+        if b4.button("📝 Manual Input", type="primary"): run_bulk(manual=True)
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini untuk menambahkannya ke Dashboard utama.")
+        st.info("Paste baris baru di sini. Kolom 'Status' akan otomatis diisi 'Outstanding'.")
         daily_input = st.data_editor(st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", on_change=update_daily_state)
         
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
-            clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""]
+            clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
-                # Memastikan tipe data sinkron sebelum concat
+                # OTOMATISASI STATUS OUTSTANDING
+                clean_new_data['Status'] = "Outstanding"
+                
+                # Sinkronisasi tipe data
                 for col in clean_new_data.columns:
-                    clean_new_data[col] = clean_new_data[col].astype(str)
+                    clean_new_data[col] = clean_new_data[col].astype(str).replace("nan", "")
                 
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru ke Dashboard Utama!")
+                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru dengan Status 'Outstanding'!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
             else:
@@ -234,15 +264,11 @@ else:
     # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring (Viewer)")
     df_v_master = st.session_state.df_master.copy()
-    
-    def get_v_options(col_name):
-        return sorted([str(x) for x in df_v_master[col_name].unique() if x and str(x).strip() != ""])
-
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", options=get_v_options('Dept.'), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", options=get_v_options('Fleet'), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", options=get_v_options('Unit no'), key="v_unit")
-    fv_stat = cv4.multiselect("Status", options=get_v_options('Status'), key="v_stat")
+    fv_dept = cv1.multiselect("Dept", options=sorted([str(x) for x in df_v_master['Dept.'].unique() if x]), key="v_dept")
+    fv_fleet = cv2.multiselect("Fleet", options=sorted([str(x) for x in df_v_master['Fleet'].unique() if x]), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
+    fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
 
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
