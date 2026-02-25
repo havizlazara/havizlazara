@@ -10,16 +10,18 @@ import base64
 # --- 1. CONFIG & SESSION STATE ---
 st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
+# Inisialisasi Session State agar data tidak hilang/reset
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'show_complete_options' not in st.session_state:
     st.session_state['show_complete_options'] = False
+if 'bulk_df' not in st.session_state:
+    st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
 # --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Menggunakan ttl=0 agar selalu mengambil data paling fresh saat dipanggil
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Deliv. Date', 'DDP', 'Supplier', 'Status', 'Delivery Note'])
@@ -27,18 +29,11 @@ def load_data():
     data.columns = [str(c).strip() for c in data.columns]
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Pastikan Kolom Krusial
-    required_cols = ['PO No', 'PO Item', 'Status', 'Delivery Note']
-    for col in required_cols:
-        if col not in data.columns: data[col] = ""
-    
-    # Konversi semua ke string untuk keamanan GSheets
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'\.0$', '', regex=True)
             
     return data
 
-# Load data ke session state jika belum ada
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
@@ -54,7 +49,7 @@ with st.sidebar:
             else: st.error("Password Salah")
     else:
         st.success("Mode Admin Aktif")
-        if st.button("Refresh Data"): # Tombol manual untuk tarik data ulang
+        if st.button("🔄 Force Refresh GSheet"):
             st.cache_data.clear()
             st.session_state.df_master = load_data()
             st.rerun()
@@ -84,19 +79,13 @@ st.markdown(f"""
         background-size: cover; background-position: center; border: 3px solid #1f4e79;
     }}
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; margin-bottom: 10px; }}
-    .giant-title {{ 
-        font-family: 'serif'; font-size: 45px; font-weight: 900; color: #ffffff !important; 
-        background: rgba(31, 78, 121, 0.8); padding: 10px 30px; border-radius: 10px; display: inline-block;
-    }}
-    .metric-card {{
-        background: white; border-radius: 10px; padding: 15px; text-align: center;
-        border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }}
+    .giant-title {{ font-size: 45px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 30px; border-radius: 10px; }}
+    .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
     </style>
     <div class="custom-header">
         <div class="logo-container"><img src="data:image/jpeg;base64,{logo_img}" style="height:90px;"></div>
         <br><h1 class="giant-title">Purchase Order Monitoring</h1><br>
-        <h2 style="color:white; letter-spacing:5px; text-shadow: 2px 2px 4px black;">NHM SUPPLY CHAIN & LOGISTICS</h2>
+        <h2 style="color:white; letter-spacing:5px;">NHM SUPPLY CHAIN & LOGISTICS</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -138,66 +127,101 @@ with tab_monitor:
     calc_h = min(max((len(df_f) + 1) * 35 + 45, 250), 800)
     
     if st.session_state['authenticated']:
-        df_ed = df_f.copy()
-        if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
+        # Agar tidak ter-reset, kita buat salinan dari master
+        df_to_edit = df_f.copy()
+        if 'Pilih' not in df_to_edit.columns: df_to_edit.insert(0, 'Pilih', False)
         
-        def highlight_row(row):
+        def highlight_logic(row):
             c_full = 'background-color: #ff5252; color: white; font-weight: bold;'
             c_po = 'background-color: #b71c1c; color: white; border: 1px solid white;'
             return [c_po if col == 'PO No' else c_full for col in row.index] if row['Pilih'] else [''] * len(row)
 
-        res_ed = st.data_editor(df_ed.style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="editor_auth")
+        # Menggunakan session state di data_editor untuk menjaga stabilitas data
+        edited_table = st.data_editor(
+            df_to_edit.style.apply(highlight_logic, axis=1), 
+            use_container_width=True, 
+            hide_index=True, 
+            height=calc_h, 
+            key="editor_main_nhm"
+        )
         
-        sel_idx = res_ed[res_ed['Pilih'] == True].index
-        st.write("🔧 **Admin Quick Actions:**")
-        a1, a2, a3, a4 = st.columns([1,1,1,2])
-        
+        # SINKRONISASI: Update Master jika ada perubahan manual di cell Status/Delivery Note
+        if not edited_table.equals(df_to_edit):
+            for i, row in edited_table.iterrows():
+                # Cari baris yang sama di master menggunakan index asli atau PO No + Item
+                mask = (st.session_state.df_master['PO No'] == row['PO No']) & (st.session_state.df_master['PO Item'] == row['PO Item'])
+                st.session_state.df_master.loc[mask, 'Status'] = row['Status']
+                st.session_state.df_master.loc[mask, 'Delivery Note'] = row['Delivery Note']
+
+        sel_idx = edited_table[edited_table['Pilih'] == True].index
+        st.write("🔧 **Quick Actions:**")
+        a1, a2, a3 = st.columns([1,1,3])
         if a1.button("🔴 Set Outstanding") and not sel_idx.empty:
-            st.session_state.df_master.loc[sel_idx, ['Status', 'Delivery Note']] = ["Outstanding", ""]
+            target_ids = edited_table.loc[sel_idx, ['PO No', 'PO Item']]
+            for _, r in target_ids.iterrows():
+                mask = (st.session_state.df_master['PO No'] == r['PO No']) & (st.session_state.df_master['PO Item'] == r['PO Item'])
+                st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = ["Outstanding", ""]
             st.rerun()
-        if a4.button("💾 SAVE TO GSHEET", type="primary"):
-            save_df = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
-            conn.update(data=save_df)
-            st.cache_data.clear() # MEMBERSIHKAN CACHE
-            st.success("Berhasil Disimpan ke Cloud!")
+
+        if a2.button("💾 SAVE TO GSHEET", type="primary"):
+            final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
+            conn.update(data=final_save)
+            st.cache_data.clear()
+            st.success("Tersimpan Permanen!")
             st.rerun()
     else:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h)
 
-# --- TAB UPDATE (PERBAIKAN VISUAL & LOGIKA) ---
+# --- TAB UPDATE (SINKRONISASI VISUAL TABEL INPUT) ---
 if tab_update:
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status & Delivery Note")
-        st.write("1. Masukkan PO No & Item. 2. Klik tombol aksi. 3. Cek Dashboard Monitoring untuk melihat hasil.")
         
-        if 'bulk_df' not in st.session_state: 
-            st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
+        # Tampilkan tabel input yang tersimpan di session state
+        input_bulk = st.data_editor(
+            st.session_state.bulk_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="bulk_editor_view"
+        )
         
-        bulk_input = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor")
-        
-        b1, b2, b3, b_manual = st.columns(4)
-        clean_in = bulk_input[(bulk_input['PO No'].astype(str).str.strip() != "") & (bulk_input['PO Item'].astype(str).str.strip() != "")]
-        
-        def process_bulk(stat=None, dn=None, use_manual=False):
-            updated = 0
-            for _, r in clean_in.iterrows():
-                mask = (st.session_state.df_master['PO No'].astype(str) == str(r['PO No']).strip()) & \
-                       (st.session_state.df_master['PO Item'].astype(str) == str(r['PO Item']).strip())
-                if mask.any():
-                    if use_manual:
-                        st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [str(r['Status']), str(r['Delivery Note'])]
-                    else:
-                        st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
-                    updated += 1
-            if updated > 0: 
-                st.success(f"Berhasil memproses {updated} baris! Data sudah masuk ke Database. Silakan cek tab Dashboard.")
-            else: 
-                st.warning("Data tidak ditemukan di database.")
+        # Update session state bulk_df jika ada ketikan manual
+        st.session_state.bulk_df = input_bulk
 
-        if b1.button("🔴 Bulk Outstanding"): process_bulk("Outstanding", "")
-        if b2.button("🟢 Bulk Bitung"): process_bulk("Complete", "Receive at Bitung")
-        if b3.button("🟢 Bulk Site"): process_bulk("Complete", "Receive at Site")
-        if b_manual.button("📝 Apply Manual Input", type="primary"): process_bulk(use_manual=True)
+        st.write("⚙️ **Aksi Pemrosesan:**")
+        b1, b2, b3, b_manual = st.columns(4)
+        
+        clean_in = input_bulk[(input_bulk['PO No'].str.strip() != "") & (input_bulk['PO Item'].str.strip() != "")]
+        
+        def run_bulk_sync(stat=None, dn=None, manual=False):
+            updated_count = 0
+            new_bulk_view = st.session_state.bulk_df.copy()
+            
+            for idx, r in clean_in.iterrows():
+                p_no = str(r['PO No']).strip()
+                p_item = str(r['PO Item']).strip()
+                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
+                
+                if mask.any():
+                    target_stat = str(r['Status']) if manual else stat
+                    target_dn = str(r['Delivery Note']) if manual else dn
+                    
+                    # Update Database Utama
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [target_stat, target_dn]
+                    # Update Visual Tabel di Tab Ini
+                    new_bulk_view.loc[idx, ['Status', 'Delivery Note']] = [target_stat, target_dn]
+                    updated_count += 1
+            
+            st.session_state.bulk_df = new_bulk_view
+            if updated_count > 0:
+                st.success(f"Berhasil update {updated_count} baris. Data sudah muncul di tabel atas dan Dashboard.")
+                st.rerun()
+            else: st.warning("PO tidak ditemukan.")
+
+        if b1.button("🔴 Bulk Outstanding"): run_bulk_sync("Outstanding", "")
+        if b2.button("🟢 Bulk Bitung"): run_bulk_sync("Complete", "Receive at Bitung")
+        if b3.button("🟢 Bulk Site"): run_bulk_sync("Complete", "Receive at Site")
+        if b_manual.button("📝 Apply Manual Input", type="primary"): run_bulk_sync(manual=True)
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
