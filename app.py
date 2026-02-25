@@ -37,7 +37,7 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- FUNGSI UPDATE STATE ---
+# Fungsi Sinkronisasi State
 def update_bulk_state():
     if "bulk_editor" in st.session_state:
         edits = st.session_state["bulk_editor"]
@@ -52,7 +52,8 @@ def update_daily_state():
             for key, val in values.items():
                 st.session_state.daily_df.at[int(row_idx), key] = val
         for row in edits.get("added_rows", []):
-            st.session_state.daily_df = pd.concat([st.session_state.daily_df, pd.DataFrame([row])], ignore_index=True)
+            new_row = pd.DataFrame([row])
+            st.session_state.daily_df = pd.concat([st.session_state.daily_df, new_row], ignore_index=True)
 
 # --- 3. SIDEBAR (LOGIN) ---
 with st.sidebar:
@@ -77,7 +78,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM ---
+# --- 4. CSS CUSTOM (FONT RAKSASA & HEADER) ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -123,11 +124,17 @@ if st.session_state['authenticated']:
     with tab_monitor:
         st.markdown("### 🔍 Filter Monitoring")
         df_master_cur = st.session_state.df_master.copy()
+        
+        # Perbaikan TypeError pada Sorted: Mengonversi ke String dan membersihkan nilai kosong
+        def get_options(col_name):
+            unique_vals = df_master_cur[col_name].unique()
+            return sorted([str(x) for x in unique_vals if x and str(x).strip() != ""])
+
         c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", options=sorted(df_master_cur['Dept.'].unique()), key="f_dept")
-        f_fleet = c2.multiselect("Fleet", options=sorted(df_master_cur['Fleet'].unique()), key="f_fleet")
-        f_unit = c3.multiselect("Unit", options=sorted(df_master_cur['Unit no'].unique()), key="f_unit")
-        f_stat = c4.multiselect("Status", options=sorted(df_master_cur['Status'].unique()), key="f_stat")
+        f_dept = c1.multiselect("Dept", options=get_options('Dept.'), key="f_dept")
+        f_fleet = c2.multiselect("Fleet", options=get_options('Fleet'), key="f_fleet")
+        f_unit = c3.multiselect("Unit", options=get_options('Unit no'), key="f_unit")
+        f_stat = c4.multiselect("Status", options=get_options('Status'), key="f_stat")
 
         df_f = df_master_cur.copy()
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
@@ -139,7 +146,7 @@ if st.session_state['authenticated']:
         if search_q:
             df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
-        # --- METRICS & CHARTS (LOGIN ONLY) ---
+        # METRICS & CHARTS
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
@@ -185,18 +192,24 @@ if st.session_state['authenticated']:
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
-        b1, b2, b3 = st.columns(3)
-        def run_bulk(stat, dn):
+        
+        b1, b2, b3, b4 = st.columns(4) # Menambahkan kolom ke-4 untuk tombol manual
+        
+        def run_bulk(stat=None, dn=None, manual=False):
             updated = 0
             for _, r in st.session_state.bulk_df.iterrows():
                 mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
                 if mask.any() and str(r['PO No']).strip() != "":
-                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [stat, dn]
+                    t_stat = str(r['Status']) if manual else stat
+                    t_dn = str(r['Delivery Note']) if manual else dn
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [t_stat, t_dn]
                     updated += 1
             st.success(f"✅ Diperbarui {updated} baris di Memori. Klik Save di Dashboard untuk simpan.")
+
         if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
-        if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
+        if b3.button("🟢 Set Site"): run_sync("Complete", "Receive at Site")
+        if b4.button("📝 Manual Input", type="primary"): run_bulk(manual=True) # Tombol Manual dimunculkan kembali
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
@@ -206,6 +219,10 @@ if st.session_state['authenticated']:
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
             clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""]
             if not clean_new_data.empty:
+                # Memastikan tipe data sinkron sebelum concat
+                for col in clean_new_data.columns:
+                    clean_new_data[col] = clean_new_data[col].astype(str)
+                
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
                 st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru ke Dashboard Utama!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
@@ -217,11 +234,15 @@ else:
     # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring (Viewer)")
     df_v_master = st.session_state.df_master.copy()
+    
+    def get_v_options(col_name):
+        return sorted([str(x) for x in df_v_master[col_name].unique() if x and str(x).strip() != ""])
+
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", options=sorted(df_v_master['Dept.'].unique()), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", options=sorted(df_v_master['Fleet'].unique()), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", options=sorted(df_v_master['Unit no'].unique()), key="v_unit")
-    fv_stat = cv4.multiselect("Status", options=sorted(df_v_master['Status'].unique()), key="v_stat")
+    fv_dept = cv1.multiselect("Dept", options=get_v_options('Dept.'), key="v_dept")
+    fv_fleet = cv2.multiselect("Fleet", options=get_v_options('Fleet'), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", options=get_v_options('Unit no'), key="v_unit")
+    fv_stat = cv4.multiselect("Status", options=get_v_options('Status'), key="v_stat")
 
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
