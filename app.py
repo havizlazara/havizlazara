@@ -38,17 +38,22 @@ def update_bulk_state():
             for key, val in values.items():
                 st.session_state.bulk_df.at[int(row_idx), key] = val
 
-# --- 3. SIDEBAR (LOGIN) ---
+# --- 3. SIDEBAR (LOGIN DENGAN FITUR ENTER) ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
-        admin_pw = st.text_input("Password Admin:", type="password")
-        if st.button("Login"):
-            if admin_pw == "nhm123":
-                st.session_state['authenticated'] = True
-                st.session_state.df_master = load_data()
-                st.rerun()
-            else: st.error("Password Salah")
+        # Menggunakan FORM agar bisa ENTER untuk Login
+        with st.form("login_form"):
+            admin_pw = st.text_input("Password Admin:", type="password")
+            submit_login = st.form_submit_button("Login")
+            
+            if submit_login:
+                if admin_pw == "nhm123":
+                    st.session_state['authenticated'] = True
+                    st.session_state.df_master = load_data()
+                    st.rerun()
+                else: 
+                    st.error("Password Salah")
     else:
         st.success("Mode Admin Aktif")
         if st.button("🔄 Sync & Refresh"):
@@ -59,7 +64,7 @@ with st.sidebar:
             st.session_state['authenticated'] = False
             st.rerun()
 
-# --- 4. CSS CUSTOM (FONT EKSTRA RAKSASA & HEADER) ---
+# --- 4. CSS CUSTOM ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -71,30 +76,25 @@ logo_img = get_base64_image("NHM.jpg")
 
 st.markdown(f"""
     <style>
-    /* Background Header - Mode Cover Pro */
     .custom-header {{
         position: relative; width: 100%; min-height: 280px; padding: 40px 20px;
         border-radius: 15px; overflow: hidden; display: flex; flex-direction: column;
         align-items: center; text-align: center; margin-bottom: 30px;
         background-image: url("data:image/jpeg;base64,{header_bg}");
-        background-size: cover; background-position: center; background-repeat: no-repeat;
-        border: 3px solid #1f4e79;
+        background-size: cover; background-position: center; border: 3px solid #1f4e79;
     }}
     .logo-container {{ background-color: white; padding: 10px; border-radius: 10px; display: inline-block; }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
     .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
 
-    /* Judul Tab & Filter - Tetap Raksasa */
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
 
-    /* JUDUL KOLOM TABEL - EKSTRA RAKSASA & BOLD (40px) */
     [data-testid="stTableColumnHeaderCell"] div {{
         font-size: 40px !important; 
         font-weight: 900 !important;
         color: #1f4e79 !important;
         padding: 15px 0px !important;
-        text-transform: uppercase;
     }}
     
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
@@ -103,7 +103,6 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# Render Header
 st.markdown(f"""
     <div class="custom-header">
         <div class="logo-container"><img src="data:image/jpeg;base64,{logo_img}" style="height:100px;"></div>
@@ -112,7 +111,7 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. LOGIKA TAB & FILTER ---
+# --- 5. LOGIKA TAB & FILTER (SINKRON UNTUK SEMUA) ---
 if st.session_state['authenticated']:
     tab_monitor, tab_update = st.tabs(["📊 DASHBOARD MONITORING", "🛠️ BULK UPDATE STATUS"])
     
@@ -143,75 +142,59 @@ if st.session_state['authenticated']:
         if not df_f.empty:
             st.write("")
             g1, g2, g3 = st.columns(3)
-            f_white = dict(family="Arial Black", size=16, color="white")
-            
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
-                # PERUBAHAN: Pie Chart PIC menjadi Bar Chart dengan Warna Berbeda & Value
                 pic_counts = df_f['PIC'].value_counts().reset_index()
                 pic_counts.columns = ['PIC', 'count']
                 fig1 = px.bar(pic_counts, x='PIC', y='count', color='PIC', height=380, title="Monitoring by PIC", text='count')
                 fig1.update_traces(textposition='auto', textfont=dict(size=14, color='white', family="Arial Black"))
-                fig1.update_layout(showlegend=False, margin=dict(t=35,b=5,l=5,r=5))
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-                
             with g2:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 fig2 = px.pie(df_f, names='Status', hole=.4, height=380, title="By Status",
                               color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
-                fig2.update_traces(textposition='inside', textinfo='percent+label', textfont=f_white)
                 st.plotly_chart(fig2, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-                
             with g3:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
                 fig3 = px.bar(ud, x='Unit no', y='count', height=380, title="Top 5 Units", color='Unit no')
-                fig3.update_traces(texttemplate='%{y}', textfont=f_white, textposition='inside')
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("### 📋 Database Monitoring")
         calc_h = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
-        
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
         def apply_style(row):
-            c_f = 'background-color: #ff5252; color: white; font-weight: bold;'
-            c_p = 'background-color: #b71c1c; color: white; border: 1px solid white;'
-            return [c_p if col == 'PO No' else c_f for col in row.index] if row['Pilih'] else [''] * len(row)
+            return ['background-color: #ff5252; color: white; font-weight: bold;'] * len(row) if row['Pilih'] else [''] * len(row)
 
-        edited_table = st.data_editor(df_ed.style.apply(apply_style, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="main_editor_vFinal")
+        edited_table = st.data_editor(df_ed.style.apply(apply_style, axis=1), use_container_width=True, hide_index=True, height=calc_h, key="main_editor")
         
         if st.button("💾 SAVE TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=final_save)
-            st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
             st.cache_data.clear()
-            st.success("✅ Berhasil Simpan & Reset!")
+            st.success("✅ Berhasil Simpan!")
             st.rerun()
 
     with tab_update:
         st.markdown("### 🛠️ Bulk Update Status")
-        input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor_sync", on_change=update_bulk_state)
+        input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key="bulk_editor", on_change=update_bulk_state)
         b1, b2, b3, b_manual = st.columns(4)
-        clean_in = st.session_state.bulk_df[(st.session_state.bulk_df['PO No'].str.strip() != "") & (st.session_state.bulk_df['PO Item'].str.strip() != "")]
         
         def run_sync(stat=None, dn=None, manual=False):
             updated = 0
-            new_view = st.session_state.bulk_df.copy()
+            clean_in = st.session_state.bulk_df[(st.session_state.bulk_df['PO No'].str.strip() != "")]
             for idx, r in clean_in.iterrows():
-                mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
+                mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip())
                 if mask.any():
                     t_stat = str(r['Status']) if manual else stat
                     t_dn = str(r['Delivery Note']) if manual else dn
                     st.session_state.df_master.loc[mask, ['Status', 'Delivery Note']] = [t_stat, t_dn]
-                    new_view.loc[idx, ['Status', 'Delivery Note']] = [t_stat, t_dn]
                     updated += 1
-            st.session_state.bulk_df = new_view
             if updated > 0: st.success(f"✅ Berhasil update {updated} baris!")
             st.rerun()
 
@@ -221,13 +204,28 @@ if st.session_state['authenticated']:
         if b_manual.button("📝 Apply Manual Input", type="primary"): run_sync(manual=True)
 
 else:
-    # --- TAMPILAN VIEWER ---
-    st.markdown("### 🔍 Filter Monitoring (Viewer Mode)")
+    # --- TAMPILAN VIEWER (FILTER LENGKAP) ---
+    st.markdown("### 🔍 Filter Monitoring (Viewer)")
     df_v = st.session_state.df_master.copy()
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()), key="v_dept")
-    if fv_dept: df_v = df_v[fv_dept] # filter logic
     
+    fv_dept = cv1.multiselect("Dept", options=sorted(st.session_state.df_master['Dept.'].unique()), key="v_dept")
+    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
+    
+    fv_fleet = cv2.multiselect("Fleet", options=sorted(df_v['Fleet'].unique()), key="v_fleet")
+    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
+    
+    fv_unit = cv3.multiselect("Unit", options=sorted(df_v['Unit no'].unique()), key="v_unit")
+    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
+    
+    fv_stat = cv4.multiselect("Status", options=sorted(df_v['Status'].unique()), key="v_stat")
+    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
+    
+    search_viewer = st.text_input("Search:", placeholder="Ketik untuk mencari...", key="v_search")
+    if search_viewer:
+        df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    
+    st.markdown("---")
     st.markdown("### 📋 Database Monitoring (View Only)")
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
 
