@@ -15,7 +15,7 @@ if 'authenticated' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi (Deliv. Date dihapus, ganti Delivery date)
+# Urutan kolom resmi
 COLUMNS_ORDER = ['Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 'Delivery date', 'DDP', 'Supplier', 'Status', 'Delivery Note']
 
 if 'daily_df' not in st.session_state:
@@ -42,9 +42,8 @@ def load_data():
         
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     
-    # Pembersihan nan menjadi kosong
+    # Pembersihan nan menjadi kosong & Format Tanggal
     for col in data.columns:
-        # Jika kolom tanggal, coba ubah ke format date
         if 'date' in col.lower() or 'Date' in col:
             data[col] = pd.to_datetime(data[col], errors='coerce').dt.strftime('%Y-%m-%d').fillna("")
         else:
@@ -135,34 +134,35 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 5. TABS LOGIC ---
+# --- 5. LOGIKA FILTER (DI LUAR TAB AGAR VIEWER BISA LIHAT) ---
+st.markdown("### 🔍 Filter Monitoring")
+df_master_cur = st.session_state.df_master.copy()
+
+def get_options(col_name):
+    unique_vals = df_master_cur[col_name].unique()
+    return sorted([str(x) for x in unique_vals if x and str(x).strip() != "" and str(x).lower() != 'nan'])
+
+c1, c2, c3, c4 = st.columns(4)
+f_dept = c1.multiselect("Dept", options=get_options('Dept.'), key="f_dept")
+f_fleet = c2.multiselect("Fleet", options=get_options('Fleet'), key="f_fleet")
+f_unit = c3.multiselect("Unit", options=get_options('Unit no'), key="f_unit")
+f_stat = c4.multiselect("Status", options=get_options('Status'), key="f_stat")
+
+df_f = df_master_cur.copy()
+if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
+if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
+if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
+
+search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...", key="global_search")
+if search_q:
+    df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+
+# --- 6. TABS LOGIC ---
 if st.session_state['authenticated']:
     tab_monitor, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
     
     with tab_monitor:
-        st.markdown("### 🔍 Filter Monitoring")
-        df_master_cur = st.session_state.df_master.copy()
-        
-        def get_options(col_name):
-            unique_vals = df_master_cur[col_name].unique()
-            return sorted([str(x) for x in unique_vals if x and str(x).strip() != ""])
-
-        c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", options=get_options('Dept.'), key="f_dept")
-        f_fleet = c2.multiselect("Fleet", options=get_options('Fleet'), key="f_fleet")
-        f_unit = c3.multiselect("Unit", options=get_options('Unit no'), key="f_unit")
-        f_stat = c4.multiselect("Status", options=get_options('Status'), key="f_stat")
-
-        df_f = df_master_cur.copy()
-        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
-        if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
-        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
-        if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-
-        search_q = st.text_input("Global Search:", placeholder="Ketik untuk mencari...", key="global_search")
-        if search_q:
-            df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
-
         # METRICS & CHARTS
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
@@ -175,8 +175,10 @@ if st.session_state['authenticated']:
             g1, g2, g3 = st.columns(3)
             with g1:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+                # FIX VALUEERROR: Mendefinisikan kolom secara eksplisit
                 pic_c = df_f['PIC'].value_counts().reset_index()
-                fig1 = px.bar(pic_c, x='index', y='PIC', color='index', height=380, title="Monitoring by PIC", text='PIC')
+                pic_c.columns = ['PIC_Name', 'Total_Count']
+                fig1 = px.bar(pic_c, x='PIC_Name', y='Total_Count', color='PIC_Name', height=380, title="Monitoring by PIC", text='Total_Count')
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with g2:
@@ -188,7 +190,8 @@ if st.session_state['authenticated']:
             with g3:
                 st.markdown('<div class="chart-box">', unsafe_allow_html=True)
                 ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                fig3 = px.bar(ud, x='index', y='Unit no', height=380, title="Top 5 Units", color='index')
+                ud.columns = ['Unit_ID', 'Unit_Count']
+                fig3 = px.bar(ud, x='Unit_ID', y='Unit_Count', height=380, title="Top 5 Units", color='Unit_ID')
                 st.plotly_chart(fig3, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -197,7 +200,6 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
-        # Konfigurasi kolom untuk tipe tanggal
         edited_table = st.data_editor(
             df_ed, 
             use_container_width=True, 
@@ -240,21 +242,21 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Kolom 'Status' akan otomatis diisi 'Outstanding'.")
+        st.info("Paste baris baru di sini. Kolom 'Status' otomatis terisi 'Outstanding'.")
         daily_input = st.data_editor(st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", on_change=update_daily_state)
         
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
             clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
-                # OTOMATISASI STATUS OUTSTANDING
+                # OTOMATISASI STATUS
                 clean_new_data['Status'] = "Outstanding"
                 
-                # Sinkronisasi tipe data
+                # Sinkronisasi tipe data & hapus nan
                 for col in clean_new_data.columns:
-                    clean_new_data[col] = clean_new_data[col].astype(str).replace("nan", "")
+                    clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru dengan Status 'Outstanding'!")
+                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
             else:
@@ -262,23 +264,10 @@ if st.session_state['authenticated']:
 
 else:
     # --- VIEWER MODE ---
-    st.markdown("### 🔍 Filter Monitoring (Viewer)")
-    df_v_master = st.session_state.df_master.copy()
-    cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", options=sorted([str(x) for x in df_v_master['Dept.'].unique() if x]), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", options=sorted([str(x) for x in df_v_master['Fleet'].unique() if x]), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
-    fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
-
-    df_v = df_v_master.copy()
-    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
-    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
-    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
-    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
-
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring (View Only)")
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
+    calc_h_v = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
+    st.dataframe(df_f, use_container_width=True, hide_index=True, height=calc_h_v)
 
 # --- EXPORT ---
 ex_buf = io.BytesIO()
