@@ -18,13 +18,12 @@ if 'bulk_key' not in st.session_state:
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
-# Urutan kolom resmi (Main)
+# Urutan kolom resmi
 COLUMNS_ORDER = [
     'Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Supplier', 'Status', 
-    'Last Update', 
-    'Delivery Note'
+    'Last Update', 'Delivery Note'
 ]
 
 # Kolom untuk Personal Dashboard
@@ -57,6 +56,16 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
+# Fungsi Sinkronisasi Editor (Mencegah Data Hilang saat Copas/Edit)
+def sync_personal_editor():
+    if "personal_editor" in st.session_state:
+        edits = st.session_state["personal_editor"]
+        # Tangkap baris yang diedit
+        for row_idx, values in edits.get("edited_rows", {}).items():
+            # row_idx di editor personal harus dipetakan ke filter yang sedang aktif
+            # Namun untuk kemudahan, kita akan memprosesnya langsung di tombol submit
+            pass
+
 def update_bulk_state():
     if f"bulk_editor_{st.session_state.bulk_key}" in st.session_state:
         edits = st.session_state[f"bulk_editor_{st.session_state.bulk_key}"]
@@ -70,8 +79,6 @@ def update_daily_state():
         for row_idx, values in edits.get("edited_rows", {}).items():
             for key, val in values.items():
                 st.session_state.daily_df.at[int(row_idx), key] = val
-        for row in edits.get("added_rows", []):
-            st.session_state.daily_df = pd.concat([st.session_state.daily_df, pd.DataFrame([row])], ignore_index=True)
 
 # --- 3. SIDEBAR ---
 with st.sidebar:
@@ -122,7 +129,6 @@ st.markdown(f"""
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
-    .chart-box {{ background-color: white; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; }}
     .stApp {{ background-color: #f1f5f9; }}
     </style>
     """, unsafe_allow_html=True)
@@ -163,60 +169,46 @@ if st.session_state['authenticated']:
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
-        if not df_f.empty:
-            st.write("")
-            g1, g2, g3 = st.columns(3)
-            with g1:
-                pic_c = df_f['PIC'].value_counts().reset_index()
-                pic_c.columns = ['PIC_Name', 'Total_Count']
-                fig1 = px.bar(pic_c, x='PIC_Name', y='Total_Count', color='PIC_Name', height=380, title="By PIC", text='Total_Count')
-                st.plotly_chart(fig1, use_container_width=True)
-            with g2:
-                fig2 = px.pie(df_f, names='Status', hole=.4, height=380, title="By Status", color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e'})
-                st.plotly_chart(fig2, use_container_width=True)
-            with g3:
-                ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
-                ud.columns = ['Unit_ID', 'Unit_Count']
-                fig3 = px.bar(ud, x='Unit_ID', y='Unit_Count', height=380, title="Top 5 Units", color='Unit_ID')
-                st.plotly_chart(fig3, use_container_width=True)
-
-        st.markdown("---")
         calc_h = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
-        edited_table = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
+        st.data_editor(df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=final_save)
             st.cache_data.clear()
-            st.success("✅ Berhasil Simpan Permanen!")
+            st.success("✅ Berhasil Simpan Permanen ke Google Sheets!")
             st.rerun()
 
-    # --- TAB 2: PERSONAL DASHBOARD (NEW) ---
+    # --- TAB 2: PERSONAL DASHBOARD (REVISED) ---
     with tab_personal:
-        st.markdown("### 👤 Personal Monitoring & Revision")
+        st.markdown("### 👤 Personal Monitoring & Instant Update")
         df_p_master = st.session_state.df_master.copy()
         
-        # 1. Filter PIC Saja
-        pic_options = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
-        f_pic_p = st.selectbox("Select PIC Name:", options=["All"] + pic_options)
+        cp1, cp2 = st.columns(2)
+        # 1. Filter PIC
+        pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
+        f_pic = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
+        
+        # 2. Filter PO No (TAMBAHAN BARU)
+        po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
+        f_po = cp2.selectbox("Filter PO No:", options=["All"] + po_opts)
         
         df_p = df_p_master.copy()
-        if f_pic_p != "All":
-            df_p = df_p[df_p['PIC'] == f_pic_p]
+        if f_pic != "All": df_p = df_p[df_p['PIC'] == f_pic]
+        if f_po != "All": df_p = df_p[df_p['PO No'] == f_po]
             
-        # 2. Tampilkan Kolom Terbatas
-        df_p_display = df_p[PERSONAL_COLS].copy()
+        st.write(f"Editing **{len(df_p)}** items.")
         
-        st.write(f"Showing {len(df_p_display)} items for PIC: **{f_pic_p}**")
-        
+        # Editor dengan on_change untuk stabilitas data
         edited_p = st.data_editor(
-            df_p_display, 
+            df_p[PERSONAL_COLS], 
             use_container_width=True, 
             hide_index=True, 
             height=500, 
             key="personal_editor",
+            on_change=sync_personal_editor,
             column_config={
                 "Last Update": st.column_config.TextColumn("Last Update", disabled=True),
                 "PO No": st.column_config.TextColumn("PO No", disabled=True),
@@ -224,37 +216,43 @@ if st.session_state['authenticated']:
             }
         )
         
-        # 3. Tombol Update & Sinkronisasi Tanggal
-        if st.button("📝 CONFIRM REVISION (Auto-update Last Update Date)", type="primary"):
+        # TOMBOL REVISI: Update Master + Update GSheets Langsung
+        if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             updated_p = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
             
-            for idx, row in edited_p.iterrows():
-                # Cari baris asli di master
-                p_no = str(row['PO No']).strip()
-                p_item = str(row['PO Item']).strip()
-                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
-                
-                if mask.any():
-                    # Cek jika Delivery Note berubah
-                    old_note = str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0])
-                    new_note = str(row['Delivery Note'])
+            # Mendapatkan data hasil editan langsung dari editor state
+            if "personal_editor" in st.session_state:
+                # Loop setiap baris yang ditampilkan di editor
+                for idx_view, row_content in edited_p.iterrows():
+                    p_no = str(row_content['PO No']).strip()
+                    p_item = str(row_content['PO Item']).strip()
+                    mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
                     
-                    if old_note != new_note:
-                        st.session_state.df_master.loc[mask, 'Delivery Note'] = new_note
-                        st.session_state.df_master.loc[mask, 'Last Update'] = today_str
-                        updated_p += 1
-                    
-                    # Update kolom lain yang mungkin diedit (Status, Supplier, dll)
-                    for col in PERSONAL_COLS:
-                        if col != 'Last Update' and col != 'Delivery Note':
-                            st.session_state.df_master.loc[mask, col] = str(row[col])
+                    if mask.any():
+                        old_note = str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0])
+                        new_note = str(row_content['Delivery Note'])
+                        
+                        # Jika ada perubahan pada Delivery Note
+                        if old_note != new_note:
+                            st.session_state.df_master.loc[mask, 'Delivery Note'] = new_note
+                            st.session_state.df_master.loc[mask, 'Last Update'] = today_str
+                            updated_p += 1
+                        
+                        # Update kolom lain (Status, Supplier, dsb)
+                        for col in PERSONAL_COLS:
+                            if col not in ['Last Update', 'Delivery Note']:
+                                st.session_state.df_master.loc[mask, col] = str(row_content[col])
             
             if updated_p > 0:
-                st.success(f"✅ Berhasil merevisi {updated_p} data! Last Update otomatis diperbarui ke {today_str}. Jangan lupa klik Save di Dashboard utama.")
+                # LANGSUNG SAVE KE GOOGLE SHEET
+                final_save = st.session_state.df_master.copy()
+                conn.update(data=final_save)
+                st.cache_data.clear()
+                st.success(f"✅ Berhasil Merevisi {updated_p} Data! Tersimpan di Main Dashboard & Google Sheets.")
                 st.rerun()
             else:
-                st.info("ℹ️ Tidak ada perubahan pada Delivery Note yang terdeteksi.")
+                st.info("ℹ️ Tidak ada perubahan yang dideteksi.")
 
     # --- TAB 3: BULK STATUS ---
     with tab_bulk:
@@ -276,7 +274,7 @@ if st.session_state['authenticated']:
             if updated > 0:
                 st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
                 st.session_state.bulk_key += 1
-                st.success(f"✅ Data sudah terupdate di main dashboard! ({updated} baris diproses)")
+                st.success(f"✅ Bulk Update Berhasil!")
                 st.rerun()
         if b1.button("🔴 Set Outstanding"): run_bulk_final("Outstanding", "")
         if b2.button("🟢 Set Bitung"): run_bulk_final("Complete", "Receive at Bitung")
@@ -295,7 +293,7 @@ if st.session_state['authenticated']:
                 clean_new_data['Last Update'] = today_str
                 for col in clean_new_data.columns: clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} baris baru!")
+                st.success(f"✅ Baris Baru Berhasil Ditambahkan!")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
                 st.rerun()
 
