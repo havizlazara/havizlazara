@@ -168,51 +168,25 @@ if st.session_state['authenticated']:
 
         st.markdown("---")
         df_ed = df_f.copy()
-        if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
-        
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
         
-        # EDITOR DASHBOARD UTAMA
-        main_editor_data = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=dynamic_height, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
-        
-        if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
-            today_str = datetime.now().strftime("%d-%m-%Y")
-            master_copy = st.session_state.df_master.copy()
-            
-            # REVISI: Sinkronkan perubahan teks (termasuk Delivery Note) ke master
-            for idx, row in main_editor_data.iterrows():
-                p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
-                mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
-                
-                if mask.any():
-                    # Cek perubahan Delivery Note untuk update tanggal otomatis
-                    old_note = str(master_copy.loc[mask, 'Delivery Note'].values[0]).strip()
-                    new_note = str(row['Delivery Note']).strip()
-                    
-                    if old_note != new_note:
-                        master_copy.loc[mask, 'Last Update'] = today_str
-                    
-                    # Update semua kolom sesuai editan tabel
-                    for col in COLUMNS_ORDER:
-                        if col != 'Last Update' or old_note != new_note:
-                            master_copy.loc[mask, col] = str(row[col])
-            
-            if save_final_changes(master_copy):
-                show_success_modal("Data Berhasil Disimpan ke Google Sheets!")
+        # TABEL MONITORING (VIEW ONLY)
+        st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
 
     with tab_personal:
-        st.markdown("### 👤 Personal Monitoring & Bulk Paste Revision")
+        st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
         cp1, cp2 = st.columns(2)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p = cp2.selectbox("Filter PO No:", options=["All"] + po_opts)
+        
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
-        p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         
+        p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key="personal_editor", num_rows="fixed", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
@@ -236,6 +210,7 @@ if st.session_state['authenticated']:
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}")
+        
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -249,6 +224,7 @@ if st.session_state['authenticated']:
             if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
+
         c_out, c_bitung, c_site = st.columns(3)
         with c_out:
             st.write("**🔴 Reset Status**")
