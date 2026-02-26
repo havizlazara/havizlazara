@@ -56,16 +56,6 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# Fungsi Sinkronisasi Editor (Mencegah Data Hilang saat Copas/Edit)
-def sync_personal_editor():
-    if "personal_editor" in st.session_state:
-        edits = st.session_state["personal_editor"]
-        # Tangkap baris yang diedit
-        for row_idx, values in edits.get("edited_rows", {}).items():
-            # row_idx di editor personal harus dipetakan ke filter yang sedang aktif
-            # Namun untuk kemudahan, kita akan memprosesnya langsung di tombol submit
-            pass
-
 def update_bulk_state():
     if f"bulk_editor_{st.session_state.bulk_key}" in st.session_state:
         edits = st.session_state[f"bulk_editor_{st.session_state.bulk_key}"]
@@ -129,6 +119,7 @@ st.markdown(f"""
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
+    .chart-box {{ background-color: white; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; }}
     .stApp {{ background-color: #f1f5f9; }}
     </style>
     """, unsafe_allow_html=True)
@@ -164,11 +155,37 @@ if st.session_state['authenticated']:
         if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
 
         st.markdown("---")
+        # --- CHARTS AREA (DIKEMBALIKAN) ---
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
 
+        if not df_f.empty:
+            st.write("")
+            g1, g2, g3 = st.columns(3)
+            with g1:
+                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+                pic_c = df_f['PIC'].value_counts().reset_index()
+                pic_c.columns = ['PIC_Name', 'Total_Count']
+                fig1 = px.bar(pic_c, x='PIC_Name', y='Total_Count', color='PIC_Name', height=380, title="Monitoring by PIC", text='Total_Count')
+                st.plotly_chart(fig1, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            with g2:
+                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+                fig2 = px.pie(df_f, names='Status', hole=.4, height=380, title="By Status",
+                              color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'})
+                st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            with g3:
+                st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+                ud = df_f['Unit no'].value_counts().nlargest(5).reset_index()
+                ud.columns = ['Unit_ID', 'Unit_Count']
+                fig3 = px.bar(ud, x='Unit_ID', y='Unit_Count', height=380, title="Top 5 Units", color='Unit_ID')
+                st.plotly_chart(fig3, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("---")
         calc_h = min(max((len(df_f) + 1) * 35 + 100, 250), 800)
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
@@ -181,85 +198,48 @@ if st.session_state['authenticated']:
             st.success("✅ Berhasil Simpan Permanen ke Google Sheets!")
             st.rerun()
 
-    # --- TAB 2: PERSONAL DASHBOARD (REVISED) ---
+    # --- TAB 2: PERSONAL DASHBOARD ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Instant Update")
         df_p_master = st.session_state.df_master.copy()
-        
         cp1, cp2 = st.columns(2)
-        # 1. Filter PIC
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
-        
-        # 2. Filter PO No (TAMBAHAN BARU)
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po = cp2.selectbox("Filter PO No:", options=["All"] + po_opts)
-        
         df_p = df_p_master.copy()
         if f_pic != "All": df_p = df_p[df_p['PIC'] == f_pic]
         if f_po != "All": df_p = df_p[df_p['PO No'] == f_po]
-            
-        st.write(f"Editing **{len(df_p)}** items.")
         
-        # Editor dengan on_change untuk stabilitas data
-        edited_p = st.data_editor(
-            df_p[PERSONAL_COLS], 
-            use_container_width=True, 
-            hide_index=True, 
-            height=500, 
-            key="personal_editor",
-            on_change=sync_personal_editor,
-            column_config={
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True),
-                "PO No": st.column_config.TextColumn("PO No", disabled=True),
-                "PO Item": st.column_config.TextColumn("PO Item", disabled=True)
-            }
-        )
+        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=500, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
-        # TOMBOL REVISI: Update Master + Update GSheets Langsung
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             updated_p = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
-            
-            # Mendapatkan data hasil editan langsung dari editor state
-            if "personal_editor" in st.session_state:
-                # Loop setiap baris yang ditampilkan di editor
-                for idx_view, row_content in edited_p.iterrows():
-                    p_no = str(row_content['PO No']).strip()
-                    p_item = str(row_content['PO Item']).strip()
-                    mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
-                    
-                    if mask.any():
-                        old_note = str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0])
-                        new_note = str(row_content['Delivery Note'])
-                        
-                        # Jika ada perubahan pada Delivery Note
-                        if old_note != new_note:
-                            st.session_state.df_master.loc[mask, 'Delivery Note'] = new_note
-                            st.session_state.df_master.loc[mask, 'Last Update'] = today_str
-                            updated_p += 1
-                        
-                        # Update kolom lain (Status, Supplier, dsb)
-                        for col in PERSONAL_COLS:
-                            if col not in ['Last Update', 'Delivery Note']:
-                                st.session_state.df_master.loc[mask, col] = str(row_content[col])
-            
+            for idx_view, row_content in edited_p.iterrows():
+                mask = (st.session_state.df_master['PO No'] == str(row_content['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(row_content['PO Item']).strip())
+                if mask.any():
+                    old_note = str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0])
+                    if old_note != str(row_content['Delivery Note']):
+                        st.session_state.df_master.loc[mask, 'Delivery Note'] = str(row_content['Delivery Note'])
+                        st.session_state.df_master.loc[mask, 'Last Update'] = today_str
+                        updated_p += 1
+                    for col in PERSONAL_COLS:
+                        if col not in ['Last Update', 'Delivery Note']: st.session_state.df_master.loc[mask, col] = str(row_content[col])
             if updated_p > 0:
-                # LANGSUNG SAVE KE GOOGLE SHEET
-                final_save = st.session_state.df_master.copy()
-                conn.update(data=final_save)
+                conn.update(data=st.session_state.df_master)
                 st.cache_data.clear()
-                st.success(f"✅ Berhasil Merevisi {updated_p} Data! Tersimpan di Main Dashboard & Google Sheets.")
+                st.success(f"✅ Berhasil Merevisi {updated_p} Data & Simpan ke Cloud!")
                 st.rerun()
-            else:
-                st.info("ℹ️ Tidak ada perubahan yang dideteksi.")
 
-    # --- TAB 3: BULK STATUS ---
+    # --- TAB 3: BULK STATUS (DENGAN SUB-OPSI & INSTANT SAVE) ---
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
+        
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}", on_change=update_bulk_state)
-        b1, b2, b3, b4 = st.columns(4)
-        def run_bulk_final(stat=None, dn=None, manual=False):
+        
+        # Fungsi Eksekusi Bulk
+        def execute_bulk_update(status_val, note_val):
             updated = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
             for _, r in st.session_state.bulk_df.iterrows():
@@ -267,19 +247,53 @@ if st.session_state['authenticated']:
                 p_item = str(r['PO Item']).strip()
                 mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
                 if mask.any() and p_no != "":
-                    t_stat = str(r['Status']) if manual else stat
-                    t_dn = str(r['Delivery Note']) if manual else dn
-                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [t_stat, t_dn, today_str]
+                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
                     updated += 1
             if updated > 0:
+                conn.update(data=st.session_state.df_master) # INSTANT SAVE TO GSHEETS
+                st.cache_data.clear()
                 st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
                 st.session_state.bulk_key += 1
-                st.success(f"✅ Bulk Update Berhasil!")
+                st.success(f"✅ Berhasil Update {updated} baris & Tersimpan di Cloud!")
                 st.rerun()
-        if b1.button("🔴 Set Outstanding"): run_bulk_final("Outstanding", "")
-        if b2.button("🟢 Set Bitung"): run_bulk_final("Complete", "Receive at Bitung")
-        if b3.button("🟢 Set Site"): run_bulk_final("Complete", "Receive at Site")
-        if b4.button("📝 Manual Input", type="primary"): run_bulk_final(manual=True)
+            else: st.warning("⚠️ PO No tidak ditemukan.")
+
+        # Layout Tombol
+        c_out, c_bitung, c_site, c_man = st.columns(4)
+        
+        with c_out:
+            if st.button("🔴 Set Outstanding", use_container_width=True):
+                execute_bulk_update("Outstanding", "")
+                
+        with c_bitung:
+            st.write("**🚢 Set Bitung**")
+            cb1, cb2 = st.columns(2)
+            if cb1.button("Partial", key="bit_p"): execute_bulk_update("Partial", "Receive at Bitung")
+            if cb2.button("Complete", key="bit_c"): execute_bulk_update("Complete", "Receive at Bitung")
+            
+        with c_site:
+            st.write("**⛰️ Set Site**")
+            cs1, cs2 = st.columns(2)
+            if cs1.button("Partial", key="site_p"): execute_bulk_update("Partial", "Receive at Site")
+            if cs2.button("Complete", key="site_c"): execute_bulk_update("Complete", "Receive at Site")
+            
+        with c_man:
+            if st.button("📝 Manual Input", type="primary", use_container_width=True):
+                # Logika Manual tetap sama
+                today_str = datetime.now().strftime("%d-%m-%Y")
+                updated_m = 0
+                for _, r in st.session_state.bulk_df.iterrows():
+                    mask = (st.session_state.df_master['PO No'] == str(r['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(r['PO Item']).strip())
+                    if mask.any() and str(r['PO No']).strip() != "":
+                        st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [str(r['Status']), str(r['Delivery Note']), today_str]
+                        updated_m += 1
+                if updated_m > 0:
+                    conn.update(data=st.session_state.df_master)
+                    st.cache_data.clear()
+                    st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
+                    st.session_state.bulk_key += 1
+                    st.success("✅ Manual Update Berhasil!")
+                    st.rerun()
 
     # --- TAB 4: DAILY UPDATE ---
     with tab_daily:
