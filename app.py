@@ -13,6 +13,11 @@ st.set_page_config(page_title="Dashboard Monitoring PO NHM", layout="wide")
 
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
+
+# Session state untuk mereset editor secara paksa (Dynamic Key)
+if 'bulk_key' not in st.session_state:
+    st.session_state.bulk_key = 0
+
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
 
@@ -35,36 +40,26 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
-    
     data.columns = [str(c).strip() for c in data.columns]
-    
     for old_col in ['Deliv. Date', 'Delivery date']:
-        if old_col in data.columns:
-            data = data.drop(columns=[old_col])
-            
+        if old_col in data.columns: data = data.drop(columns=[old_col])
     for col in COLUMNS_ORDER:
-        if col not in data.columns:
-            data[col] = ""
-            
+        if col not in data.columns: data[col] = ""
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
-    
     for col in data.columns:
         data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
-            
     return data
 
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
 def update_bulk_state():
-    if "bulk_editor" in st.session_state:
-        edits = st.session_state["bulk_editor"]
+    if f"bulk_editor_{st.session_state.bulk_key}" in st.session_state:
+        edits = st.session_state[f"bulk_editor_{st.session_state.bulk_key}"]
         for row_idx, values in edits.get("edited_rows", {}).items():
             for key, val in values.items():
                 st.session_state.bulk_df.at[int(row_idx), key] = val
-        for row in edits.get("added_rows", []):
-            st.session_state.bulk_df = pd.concat([st.session_state.bulk_df, pd.DataFrame([row])], ignore_index=True)
 
 def update_daily_state():
     if "daily_editor" in st.session_state:
@@ -75,7 +70,7 @@ def update_daily_state():
         for row in edits.get("added_rows", []):
             st.session_state.daily_df = pd.concat([st.session_state.daily_df, pd.DataFrame([row])], ignore_index=True)
 
-# --- 3. SIDEBAR (LOGIN) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -123,7 +118,7 @@ st.markdown(f"""
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
     .stSelectbox label p, .stMultiSelect label p, .stTextInput label p {{ font-size: 30px !important; font-weight: bold !important; color: #1f4e79 !important; }}
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; padding: 15px 0px !important; }}
-    .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
+    .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
     .chart-box {{ background-color: white; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; }}
     .stApp {{ background-color: #f1f5f9; }}
     </style>
@@ -202,11 +197,7 @@ if st.session_state['authenticated']:
         
         edited_table = st.data_editor(
             df_ed, use_container_width=True, hide_index=True, height=calc_h, key="main_editor",
-            column_config={
-                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date"),
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
-            }
+            column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)}
         )
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
@@ -218,19 +209,23 @@ if st.session_state['authenticated']:
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
+        
+        # MENGGUNAKAN DYNAMIC KEY UNTUK RESET PAKSA
         input_bulk = st.data_editor(
             st.session_state.bulk_df, 
             num_rows="dynamic", 
             use_container_width=True, 
-            key="bulk_editor", 
+            key=f"bulk_editor_{st.session_state.bulk_key}", 
             on_change=update_bulk_state
         )
+        
         b1, b2, b3, b4 = st.columns(4)
         
-        def run_bulk(stat=None, dn=None, manual=False):
+        def run_bulk_final(stat=None, dn=None, manual=False):
             updated = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
-            for _, r in st.session_state.bulk_df.iterrows():
+            # Proses data dari session state
+            for idx, r in st.session_state.bulk_df.iterrows():
                 p_no = str(r['PO No']).strip()
                 p_item = str(r['PO Item']).strip()
                 mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
@@ -242,35 +237,29 @@ if st.session_state['authenticated']:
                     updated += 1
             
             if updated > 0:
-                # RESET TABEL BULK SETELAH UPDATE
+                # 1. Kosongkan session data
                 st.session_state.bulk_df = pd.DataFrame([{"PO No": "", "PO Item": "", "Status": "", "Delivery Note": ""}] * 5)
+                # 2. Ubah Key agar Widget Reset total
+                st.session_state.bulk_key += 1
+                # 3. Notifikasi & Refresh
                 st.success(f"✅ Data sudah terupdate di main dashboard! ({updated} baris diproses)")
-                st.rerun() 
+                st.rerun()
             else:
                 st.warning("⚠️ Tidak ada PO yang cocok ditemukan.")
 
-        if b1.button("🔴 Set Outstanding"): run_bulk("Outstanding", "")
-        if b2.button("🟢 Set Bitung"): run_bulk("Complete", "Receive at Bitung")
-        if b3.button("🟢 Set Site"): run_bulk("Complete", "Receive at Site")
-        if b4.button("📝 Manual Input", type="primary"): run_bulk(manual=True)
+        if b1.button("🔴 Set Outstanding"): run_bulk_final("Outstanding", "")
+        if b2.button("🟢 Set Bitung"): run_bulk_final("Complete", "Receive at Bitung")
+        if b3.button("🟢 Set Site"): run_bulk_final("Complete", "Receive at Site")
+        if b4.button("📝 Manual Input", type="primary"): run_bulk_final(manual=True)
 
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
         daily_input = st.data_editor(
-            st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", 
-            on_change=update_daily_state,
-            column_config={
-                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date"),
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
-            }
+            st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key="daily_editor", on_change=update_daily_state,
+            column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)}
         )
-        
         if st.button("🚀 INSERT NEW DATA TO DASHBOARD", type="primary"):
-            clean_new_data = st.session_state.daily_df[
-                st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""
-            ].copy()
-            
+            clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new_data['Status'] = "Outstanding"
@@ -287,19 +276,18 @@ else:
     st.markdown("### 🔍 Filter Monitoring (Viewer)")
     df_v_master = st.session_state.df_master.copy()
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", options=sorted([str(x) for x in df_v_master['Dept.'].unique() if x]), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", options=sorted([str(x) for x in df_v_master['Fleet'].unique() if x]), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", options=sorted([str(x) for x in df_v_master['Unit no'].unique() if x]), key="v_unit")
-    fv_stat = cv4.multiselect("Status", options=sorted([str(x) for x in df_v_master['Status'].unique() if x]), key="v_stat")
+    def get_v_options(col): return sorted([str(x) for x in df_v_master[col].unique() if x])
+    fv_dept = cv1.multiselect("Dept", options=get_v_options('Dept.'), key="v_dept")
+    fv_fleet = cv2.multiselect("Fleet", options=get_v_options('Fleet'), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", options=get_v_options('Unit no'), key="v_unit")
+    fv_stat = cv4.multiselect("Status", options=get_v_options('Status'), key="v_stat")
     search_viewer = st.text_input("Global Search:", placeholder="Cari apapun...", key="global_search_viewer")
-    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
-    if search_viewer:
-        df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
 
 # --- EXPORT ---
