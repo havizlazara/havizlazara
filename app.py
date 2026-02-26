@@ -120,7 +120,8 @@ st.markdown(f"""<div class="custom-header"><div style="background:white;padding:
 
 # --- 5. TABS LOGIC ---
 if st.session_state['authenticated']:
-    tab_monitor, tab_personal, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "👤 PERSONAL DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
+    # URUTAN TAB DISESUAIKAN (Dashboard -> Daily Update -> Personal -> Update Status)
+    tab_monitor, tab_daily, tab_personal, tab_bulk = st.tabs(["📊 DASHBOARD", "📅 DAILY UPDATE", "👤 PERSONAL DASHBOARD", "🛠️ UPDATE STATUS"])
     
     with tab_monitor:
         st.markdown("### 🔍 Filter Monitoring")
@@ -167,11 +168,21 @@ if st.session_state['authenticated']:
                 st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units", text='Count'), use_container_width=True)
 
         st.markdown("---")
-        df_ed = df_f.copy()
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
-        
-        # TABEL MONITORING (VIEW ONLY)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
+
+    with tab_daily:
+        st.markdown("### 📅 Daily Update")
+        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}")
+        if st.button("🚀 INSERT & AUTO SAVE"):
+            clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
+            if not clean_new.empty:
+                today_str = datetime.now().strftime("%d-%m-%Y")
+                clean_new['Status'], clean_new['Last Update'] = "Outstanding", today_str
+                new_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
+                if save_final_changes(new_master):
+                    st.session_state.daily_key += 1
+                    show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
@@ -208,7 +219,7 @@ if st.session_state['authenticated']:
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
     with tab_bulk:
-        st.markdown("### 🛠️ Bulk Update Status")
+        st.markdown("### 🛠️ Update Status")
         input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}")
         
         def execute_bulk_update_final(status_val, note_val):
@@ -239,19 +250,6 @@ if st.session_state['authenticated']:
             cs1, cs2 = st.columns(2)
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
             if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
-
-    with tab_daily:
-        st.markdown("### 📅 Daily Update")
-        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}")
-        if st.button("🚀 INSERT & AUTO SAVE"):
-            clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
-            if not clean_new.empty:
-                today_str = datetime.now().strftime("%d-%m-%Y")
-                clean_new['Status'], clean_new['Last Update'] = "Outstanding", today_str
-                new_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
-                if save_final_changes(new_master):
-                    st.session_state.daily_key += 1
-                    show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
 else:
     # --- VIEWER MODE ---
