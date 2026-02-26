@@ -15,10 +15,9 @@ if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'bulk_key' not in st.session_state:
     st.session_state.bulk_key = 0
-if 'daily_key' not in st.session_state: # Key untuk reset daily update
+if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# Inisialisasi DataFrame kosong tanpa batasan baris
 if 'bulk_df' not in st.session_state:
     st.session_state.bulk_df = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
 
@@ -60,7 +59,7 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# FUNGSI SINKRONISASI (Mencegah data hilang saat copas banyak baris)
+# FUNGSI SINKRONISASI
 def update_bulk_state():
     key = f"bulk_editor_{st.session_state.bulk_key}"
     if key in st.session_state:
@@ -206,10 +205,11 @@ if st.session_state['authenticated']:
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             final_save = st.session_state.df_master.drop(columns=['Pilih'], errors='ignore')
             conn.update(data=final_save)
+            st.toast("✅ Database Berhasil Disimpan Permanen!", icon="💾")
             st.cache_data.clear()
-            st.success("✅ Berhasil Simpan Permanen ke Google Sheets!")
             st.rerun()
 
+    # --- TAB 2: PERSONAL DASHBOARD (FIXED DELAY) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Instant Update")
         df_p_master = st.session_state.df_master.copy()
@@ -222,28 +222,45 @@ if st.session_state['authenticated']:
         if f_pic != "All": df_p = df_p[df_p['PIC'] == f_pic]
         if f_po != "All": df_p = df_p[df_p['PO No'] == f_po]
         
+        # Penanganan Editor Personal agar Instan
         edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=500, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             updated_p = 0
             today_str = datetime.now().strftime("%d-%m-%Y")
+            
+            # Gunakan edited_p secara langsung (mencegah delay beberapa kali klik)
             for idx, row in edited_p.iterrows():
-                mask = (st.session_state.df_master['PO No'] == str(row['PO No']).strip()) & (st.session_state.df_master['PO Item'] == str(row['PO Item']).strip())
+                p_no = str(row['PO No']).strip()
+                p_item = str(row['PO Item']).strip()
+                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
+                
                 if mask.any():
-                    if str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0]) != str(row['Delivery Note']):
-                        st.session_state.df_master.loc[mask, 'Delivery Note'] = str(row['Delivery Note'])
+                    old_note = str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0])
+                    new_note = str(row['Delivery Note'])
+                    
+                    if old_note != new_note:
+                        st.session_state.df_master.loc[mask, 'Delivery Note'] = new_note
                         st.session_state.df_master.loc[mask, 'Last Update'] = today_str
                         updated_p += 1
+                    
+                    # Update kolom lain
                     for col in PERSONAL_COLS:
-                        if col not in ['Last Update', 'Delivery Note']: st.session_state.df_master.loc[mask, col] = str(row[col])
+                        if col not in ['Last Update', 'Delivery Note']:
+                            st.session_state.df_master.loc[mask, col] = str(row[col])
+            
             if updated_p > 0:
                 conn.update(data=st.session_state.df_master)
+                st.toast(f"✅ Revisi Berhasil! {updated_p} Data Diperbarui.", icon="🚀")
                 st.cache_data.clear()
-                st.success(f"✅ Berhasil Merevisi {updated_p} Data & Simpan Cloud!")
                 st.rerun()
+            else:
+                st.toast("ℹ️ Tidak Ada Perubahan yang Disimpan.", icon="🔍")
 
+    # --- TAB 3: BULK STATUS ---
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
+        
         input_bulk = st.data_editor(st.session_state.bulk_df, num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}", on_change=update_bulk_state)
         
         def execute_bulk_update(status_val, note_val):
@@ -258,11 +275,12 @@ if st.session_state['authenticated']:
                     updated += 1
             if updated > 0:
                 conn.update(data=st.session_state.df_master)
-                st.cache_data.clear()
+                st.toast(f"✅ Bulk Update Sukses! {updated} PO Diperbarui.", icon="🛠️")
                 st.session_state.bulk_df = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
                 st.session_state.bulk_key += 1
-                st.success(f"✅ Berhasil Update {updated} baris & Simpan Cloud!")
+                st.cache_data.clear()
                 st.rerun()
+            else: st.toast("⚠️ PO No Tidak Ditemukan!", icon="❌")
 
         c_out, c_bitung, c_site, c_man = st.columns(4)
         with c_out:
@@ -289,58 +307,29 @@ if st.session_state['authenticated']:
                         updated_m += 1
                 if updated_m > 0:
                     conn.update(data=st.session_state.df_master)
-                    st.cache_data.clear()
+                    st.toast("✅ Manual Update Berhasil!", icon="📝")
                     st.session_state.bulk_df = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
                     st.session_state.bulk_key += 1
-                    st.success("✅ Manual Update Berhasil!")
+                    st.cache_data.clear()
                     st.rerun()
 
-    # --- TAB 4: DAILY UPDATE (INSTANT UPDATE & NO LIMITS) ---
+    # --- TAB 4: DAILY UPDATE ---
     with tab_daily:
         st.markdown("### 📅 Daily Update (Insert Data Baru)")
-        st.info("Paste baris baru di sini. Berapa pun jumlahnya, data akan langsung masuk ke Dashboard & Cloud.")
-        
-        # Menggunakan Dynamic Key dan Dynamic Rows
-        daily_input = st.data_editor(
-            st.session_state.daily_df, 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key=f"daily_editor_{st.session_state.daily_key}", 
-            on_change=update_daily_state,
-            column_config={
-                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date"),
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
-            }
-        )
-        
-        if st.button("🚀 INSERT NEW DATA & AUTO SAVE TO CLOUD", type="primary"):
-            # Ambil data dari state editor
-            clean_new_data = st.session_state.daily_df[
-                st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""
-            ].copy()
-            
+        daily_input = st.data_editor(st.session_state.daily_df, num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}", on_change=update_daily_state, column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
+        if st.button("🚀 INSERT NEW DATA & AUTO SAVE", type="primary"):
+            clean_new_data = st.session_state.daily_df[st.session_state.daily_df['PO No'].fillna("").astype(str).str.strip() != ""].copy()
             if not clean_new_data.empty:
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new_data['Status'] = "Outstanding"
                 clean_new_data['Last Update'] = today_str
-                for col in clean_new_data.columns:
-                    clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
-                
-                # 1. Update Memori
+                for col in clean_new_data.columns: clean_new_data[col] = clean_new_data[col].fillna("").astype(str).replace("nan", "")
                 st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new_data], ignore_index=True)
-                
-                # 2. Update Cloud (Google Sheets) Langsung
                 conn.update(data=st.session_state.df_master)
-                st.cache_data.clear()
-                
-                # 3. Notifikasi & Reset Editor
-                st.success(f"✅ Berhasil menambahkan {len(clean_new_data)} data baru & Tersimpan di Google Sheets!")
+                st.toast(f"✅ {len(clean_new_data)} Baris Baru Berhasil Ditambahkan!", icon="🚀")
                 st.session_state.daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
-                st.session_state.daily_key += 1 # Reset visual tabel
+                st.session_state.daily_key += 1
                 st.rerun()
-            else:
-                st.warning("⚠️ Tidak ada data baru yang valid untuk dimasukkan (PO No kosong).")
 
 else:
     # --- VIEWER MODE ---
