@@ -25,7 +25,6 @@ COLUMNS_ORDER = [
     'Last Update', 'Delivery Note'
 ]
 
-# Kolom Personal Dashboard
 PERSONAL_COLS = [
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
@@ -67,7 +66,7 @@ def save_to_gsheets(df_to_save):
         st.error(f"Gagal simpan ke Cloud: {e}")
         return False
 
-# --- 3. SIDEBAR (LOGIN DIKEMBALIKAN) ---
+# --- 3. SIDEBAR (LOGIN) ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -77,8 +76,7 @@ with st.sidebar:
                 if admin_pw == "nhm123":
                     st.session_state['authenticated'] = True
                     st.rerun()
-                else:
-                    st.error("Password Salah")
+                else: st.error("Password Salah")
     else:
         st.success("Admin Active ✅")
         if st.button("Logout"):
@@ -86,13 +84,12 @@ with st.sidebar:
             st.rerun()
     
     st.markdown("---")
-    # Tombol Download Excel tetap di sidebar agar mudah diakses
     ex_buf = io.BytesIO()
     with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr: 
         st.session_state.df_master.to_excel(wr, index=False)
     st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
 
-# --- 4. CSS CUSTOM & HEADER ---
+# --- 4. CSS CUSTOM ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
@@ -142,8 +139,9 @@ if st.session_state['authenticated']:
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"]=="Outstanding"])}</h2></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"]=="Complete"])}</h2></div>', unsafe_allow_html=True)
+        # Fix Outstanding logic case-insensitive
+        m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
 
         if not df_f.empty:
             g1, g2, g3 = st.columns(3)
@@ -152,7 +150,17 @@ if st.session_state['authenticated']:
                 pic_data.columns = ['PIC_Name', 'Count']
                 st.plotly_chart(px.bar(pic_data, x='PIC_Name', y='Count', color='PIC_Name', height=350, title="By PIC", text='Count'), use_container_width=True)
             with g2:
-                st.plotly_chart(px.pie(df_f, names='Status', hole=.4, height=350, title="By Status", color='Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'}), use_container_width=True)
+                # PERBAIKAN PIE CHART: Standarisasi Kategori
+                df_pie = df_f.copy()
+                def clean_status(s):
+                    s = str(s).strip().capitalize()
+                    if "Outstanding" in s: return "Outstanding"
+                    if "Partial" in s: return "Partial"
+                    if "Complete" in s: return "Complete"
+                    return s
+                df_pie['Clean_Status'] = df_pie['Status'].apply(clean_status)
+                st.plotly_chart(px.pie(df_pie, names='Clean_Status', hole=.4, height=350, title="By Status", color='Clean_Status', 
+                                      color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'}), use_container_width=True)
             with g3:
                 unit_data = df_f['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_data.columns = ['Unit_No', 'Count']
@@ -161,7 +169,8 @@ if st.session_state['authenticated']:
         st.markdown("---")
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
-        st.data_editor(df_ed, use_container_width=True, hide_index=True, height=400, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
+        # PERBAIKAN TINGGI TABEL (Naik ke 800)
+        st.data_editor(df_ed, use_container_width=True, hide_index=True, height=800, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
             if save_to_gsheets(st.session_state.df_master):
@@ -180,7 +189,7 @@ if st.session_state['authenticated']:
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         
-        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=400, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=600, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -252,4 +261,4 @@ else:
     
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring (View Only)")
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
+    st.dataframe(df_v, use_container_width=True, hide_index=True, height=800)
