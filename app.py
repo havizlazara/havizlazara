@@ -25,6 +25,7 @@ COLUMNS_ORDER = [
     'Last Update', 'Delivery Note'
 ]
 
+# Kolom Personal Dashboard
 PERSONAL_COLS = [
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
@@ -49,10 +50,10 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# --- MODAL POP-UP (DIALOG) ---
+# --- MODAL POP-UP ---
 @st.dialog("Notification")
 def show_success_modal(message):
-    st.write(f"### {message}")
+    st.success(message)
     if st.button("Done update"):
         st.rerun()
 
@@ -66,7 +67,32 @@ def save_to_gsheets(df_to_save):
         st.error(f"Gagal simpan ke Cloud: {e}")
         return False
 
-# --- 3. CSS CUSTOM ---
+# --- 3. SIDEBAR (LOGIN DIKEMBALIKAN) ---
+with st.sidebar:
+    st.header("🔐 Admin Access")
+    if not st.session_state['authenticated']:
+        with st.form("login_form"):
+            admin_pw = st.text_input("Password Admin:", type="password")
+            if st.form_submit_button("Login"):
+                if admin_pw == "nhm123":
+                    st.session_state['authenticated'] = True
+                    st.rerun()
+                else:
+                    st.error("Password Salah")
+    else:
+        st.success("Admin Active ✅")
+        if st.button("Logout"):
+            st.session_state['authenticated'] = False
+            st.rerun()
+    
+    st.markdown("---")
+    # Tombol Download Excel tetap di sidebar agar mudah diakses
+    ex_buf = io.BytesIO()
+    with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr: 
+        st.session_state.df_master.to_excel(wr, index=False)
+    st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+
+# --- 4. CSS CUSTOM & HEADER ---
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
@@ -93,12 +119,11 @@ st.markdown(f"""
 
 st.markdown(f"""<div class="custom-header"><div style="background:white;padding:10px;border-radius:10px;display:inline-block;"><img src="data:image/jpeg;base64,{logo_img}" style="height:100px;"></div><br><h1 class="giant-title">Purchase Order Monitoring</h1><div class="header-sub">NHM SUPPLY CHAIN & LOGISTICS</div></div>""", unsafe_allow_html=True)
 
-# --- 4. TABS LOGIC ---
+# --- 5. TABS LOGIC ---
 if st.session_state['authenticated']:
     tab_monitor, tab_personal, tab_bulk, tab_daily = st.tabs(["📊 DASHBOARD", "👤 PERSONAL DASHBOARD", "🛠️ BULK STATUS", "📅 DAILY UPDATE"])
     
     with tab_monitor:
-        # FILTER POSISI DIBAWAH TAB
         st.markdown("### 🔍 Filter Monitoring")
         df_master_cur = st.session_state.df_master.copy()
         def get_options(col): return sorted([str(x) for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
@@ -171,8 +196,8 @@ if st.session_state['authenticated']:
                     for col in PERSONAL_COLS:
                         if col not in ['Last Update', 'Delivery Note']: st.session_state.df_master.loc[mask, col] = str(row[col])
             
-            if updated_p >= 0 and save_to_gsheets(st.session_state.df_master):
-                show_success_modal(f"Berhasil Merevisi Data & Simpan Cloud!")
+            if save_to_gsheets(st.session_state.df_master):
+                show_success_modal("Berhasil Merevisi Data & Simpan ke Cloud!")
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
@@ -210,7 +235,7 @@ if st.session_state['authenticated']:
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
 else:
-    # --- VIEWER MODE DENGAN FILTER ---
+    # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring")
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x) for x in df_v_master[col].unique() if x])
@@ -228,10 +253,3 @@ else:
     st.markdown("---")
     st.markdown("### 📋 Database Monitoring (View Only)")
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=600)
-
-with st.sidebar:
-    if st.session_state['authenticated']:
-        st.success("Admin Active")
-    ex_buf = io.BytesIO()
-    with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr: st.session_state.df_master.to_excel(wr, index=False)
-    st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
