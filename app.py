@@ -61,7 +61,7 @@ def save_final_changes(df_to_save):
         df_clean = df_to_save.drop(columns=['Pilih'], errors='ignore')
         conn.update(data=df_clean)
         st.cache_data.clear()
-        st.session_state.df_master = df_clean # Sinkronkan ke memori
+        st.session_state.df_master = df_clean
         return True
     except Exception as e:
         st.error(f"Gagal simpan ke Cloud: {e}")
@@ -110,10 +110,7 @@ st.markdown(f"""
     }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
     .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
-    
-    /* UKURAN FONT TAB BESAR */
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
-    
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
     </style>
@@ -177,7 +174,6 @@ if st.session_state['authenticated']:
         main_editor_data = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=dynamic_height, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
-            # Sync master data dengan editan terbaru di tabel
             master_copy = st.session_state.df_master.copy()
             for idx, row in main_editor_data.iterrows():
                 p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
@@ -203,28 +199,40 @@ if st.session_state['authenticated']:
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        
+        # TABEL PERSONAL EDITOR
+        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
-            master_p_update = st.session_state.df_master.copy()
-            updated_p = 0
-            for idx, row in edited_p.iterrows():
-                p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
-                mask = (master_p_update['PO No'] == p_no) & (master_p_update['PO Item'] == p_item)
-                if mask.any():
-                    # DETEKSI PERUBAHAN DELIVERY NOTE
-                    old_note = str(master_p_update.loc[mask, 'Delivery Note'].values[0])
-                    new_note = str(row['Delivery Note'])
-                    if old_note != new_note:
-                        master_p_update.loc[mask, 'Last Update'] = today_str # Update tanggal di sini
-                        updated_p += 1
-                    # Update semua kolom dari tabel personal ke master
-                    for col in PERSONAL_COLS:
-                        master_p_update.loc[mask, col] = str(row[col])
+            master_final = st.session_state.df_master.copy()
+            updated_count = 0
             
-            if save_final_changes(master_p_update):
-                show_success_modal(f"Berhasil Merevisi {updated_p} Data & Simpan Cloud!")
+            # Membandingkan data yang tampil di editor dengan data di database master
+            for _, row in edited_p_df.iterrows():
+                po_num = str(row['PO No']).strip()
+                po_itm = str(row['PO Item']).strip()
+                
+                # Cari baris yang cocok di master database
+                mask = (master_final['PO No'] == po_num) & (master_final['PO Item'] == po_itm)
+                
+                if mask.any():
+                    # Ambil data lama dari master
+                    old_note = str(master_final.loc[mask, 'Delivery Note'].values[0]).strip()
+                    new_note = str(row['Delivery Note']).strip()
+                    
+                    # Jika ada perubahan pada Delivery Note, pasang tanggal baru
+                    if old_note != new_note:
+                        master_final.loc[mask, 'Last Update'] = today_str
+                        updated_count += 1
+                    
+                    # Tetap update semua kolom lainnya (seperti Status, Material, dll)
+                    for col in PERSONAL_COLS:
+                        if col != 'Last Update': # Jangan menimpa Last Update kecuali jika ada perubahan note di atas
+                            master_final.loc[mask, col] = str(row[col])
+            
+            if save_final_changes(master_final):
+                show_success_modal(f"Berhasil Merevisi {updated_count} baris! Data sudah sinkron ke Google Sheets.")
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
