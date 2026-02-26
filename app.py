@@ -56,22 +56,18 @@ def show_success_modal(message):
     if st.button("Done update"):
         st.rerun()
 
-# --- REVISI SAVE: Menangani editan langsung di Status/Kolom lain ---
-def save_final_changes(edited_df):
+def save_final_changes(df_to_save):
     try:
-        # Hapus kolom dummy 'Pilih'
-        df_to_save = edited_df.drop(columns=['Pilih'], errors='ignore')
-        # Update Master di GSheets
-        conn.update(data=df_to_save)
+        df_clean = df_to_save.drop(columns=['Pilih'], errors='ignore')
+        conn.update(data=df_clean)
         st.cache_data.clear()
-        # Update session state lokal agar sinkron
-        st.session_state.df_master = df_to_save
+        st.session_state.df_master = df_clean # Sinkronkan ke memori
         return True
     except Exception as e:
-        st.error(f"Gagal simpan: {e}")
+        st.error(f"Gagal simpan ke Cloud: {e}")
         return False
 
-# --- 3. SIDEBAR (LOGIN) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("🔐 Admin Access")
     if not st.session_state['authenticated']:
@@ -114,6 +110,10 @@ st.markdown(f"""
     }}
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
     .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
+    
+    /* UKURAN FONT TAB BESAR */
+    button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
+    
     [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
     </style>
@@ -173,29 +173,22 @@ if st.session_state['authenticated']:
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
         
-        # PERBAIKAN TINGGI TABEL DINAMIS: (Jumlah baris * 35px) + Header
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
-        
-        # TABEL UTAMA (Admin bisa edit langsung Status di sini)
-        main_editor_data = st.data_editor(
-            df_ed, use_container_width=True, hide_index=True, height=dynamic_height, 
-            key="main_editor", 
-            column_config={
-                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
-                "Doc Date": st.column_config.TextColumn("Doc Date"), 
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
-            }
-        )
+        main_editor_data = st.data_editor(df_ed, use_container_width=True, hide_index=True, height=dynamic_height, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
-            # Gabungkan hasil editan tabel dengan data master asli
+            # Sync master data dengan editan terbaru di tabel
             master_copy = st.session_state.df_master.copy()
-            # Sinkronisasi data yang difilter kembali ke master
-            master_copy.update(main_editor_data) 
+            for idx, row in main_editor_data.iterrows():
+                p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
+                mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
+                if mask.any():
+                    for col in COLUMNS_ORDER: master_copy.loc[mask, col] = str(row[col])
             
             if save_final_changes(master_copy):
                 show_success_modal("Data Berhasil Disimpan ke Google Sheets!")
 
+    # --- TAB PERSONAL (FIXED LAST UPDATE LOGIC) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
@@ -209,8 +202,8 @@ if st.session_state['authenticated']:
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         
-        p_dynamic_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_dynamic_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
+        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -220,14 +213,18 @@ if st.session_state['authenticated']:
                 p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
                 mask = (master_p_update['PO No'] == p_no) & (master_p_update['PO Item'] == p_item)
                 if mask.any():
-                    if str(master_p_update.loc[mask, 'Delivery Note'].values[0]) != str(row['Delivery Note']):
-                        master_p_update.loc[mask, 'Last Update'] = today_str
+                    # DETEKSI PERUBAHAN DELIVERY NOTE
+                    old_note = str(master_p_update.loc[mask, 'Delivery Note'].values[0])
+                    new_note = str(row['Delivery Note'])
+                    if old_note != new_note:
+                        master_p_update.loc[mask, 'Last Update'] = today_str # Update tanggal di sini
                         updated_p += 1
+                    # Update semua kolom dari tabel personal ke master
                     for col in PERSONAL_COLS:
                         master_p_update.loc[mask, col] = str(row[col])
             
             if save_final_changes(master_p_update):
-                show_success_modal("Berhasil Merevisi Data & Simpan ke Cloud!")
+                show_success_modal(f"Berhasil Merevisi {updated_p} Data & Simpan Cloud!")
 
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
@@ -273,13 +270,11 @@ else:
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.')), cv2.multiselect("Fleet", get_v_options('Fleet')), cv3.multiselect("Unit", get_v_options('Unit no')), cv4.multiselect("Status", get_v_options('Status'))
     search_viewer = st.text_input("Global Search:", placeholder="Cari...", key="gs_v")
-    
     df_v = df_v_master.copy()
-    if fv_dept: df_v = df_v[fv_dept]
-    if fv_fleet: df_v = df_v[fv_fleet]
-    if fv_unit: df_v = df_v[fv_unit]
-    if fv_stat: df_v = df_v[fv_stat]
+    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
+    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
+    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
+    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
-    
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height)
