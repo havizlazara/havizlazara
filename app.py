@@ -184,7 +184,6 @@ if st.session_state['authenticated']:
             if save_final_changes(master_copy):
                 show_success_modal("Data Berhasil Disimpan ke Google Sheets!")
 
-    # --- TAB PERSONAL (FIXED LAST UPDATE LOGIC) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
@@ -199,45 +198,33 @@ if st.session_state['authenticated']:
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        
-        # TABEL PERSONAL EDITOR
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_final = st.session_state.df_master.copy()
             updated_count = 0
-            
-            # Membandingkan data yang tampil di editor dengan data di database master
             for _, row in edited_p_df.iterrows():
-                po_num = str(row['PO No']).strip()
-                po_itm = str(row['PO Item']).strip()
-                
-                # Cari baris yang cocok di master database
+                po_num, po_itm = str(row['PO No']).strip(), str(row['PO Item']).strip()
                 mask = (master_final['PO No'] == po_num) & (master_final['PO Item'] == po_itm)
-                
                 if mask.any():
-                    # Ambil data lama dari master
                     old_note = str(master_final.loc[mask, 'Delivery Note'].values[0]).strip()
                     new_note = str(row['Delivery Note']).strip()
-                    
-                    # Jika ada perubahan pada Delivery Note, pasang tanggal baru
                     if old_note != new_note:
                         master_final.loc[mask, 'Last Update'] = today_str
                         updated_count += 1
-                    
-                    # Tetap update semua kolom lainnya (seperti Status, Material, dll)
                     for col in PERSONAL_COLS:
-                        if col != 'Last Update': # Jangan menimpa Last Update kecuali jika ada perubahan note di atas
-                            master_final.loc[mask, col] = str(row[col])
-            
+                        if col != 'Last Update': master_final.loc[mask, col] = str(row[col])
             if save_final_changes(master_final):
-                show_success_modal(f"Berhasil Merevisi {updated_count} baris! Data sudah sinkron ke Google Sheets.")
+                show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
+    # --- TAB BULK STATUS (RESTORED PARTIAL/COMPLETE OPTIONS) ---
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
         input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}")
         
+        
+
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -252,10 +239,24 @@ if st.session_state['authenticated']:
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
 
-        c1, c2, c3 = st.columns(3)
-        if c1.button("🔴 Set Outstanding"): execute_bulk_update_final("Outstanding", "")
-        if c2.button("🟢 Set Bitung Complete"): execute_bulk_update_final("Complete", "Receive at Bitung")
-        if c3.button("🟢 Set Site Complete"): execute_bulk_update_final("Complete", "Receive at Site")
+        c_out, c_bitung, c_site = st.columns(3)
+        
+        with c_out:
+            st.write("**🔴 Reset Status**")
+            if st.button("Set Outstanding", use_container_width=True): 
+                execute_bulk_update_final("Outstanding", "")
+        
+        with c_bitung:
+            st.write("**🚢 Set Bitung**")
+            cb1, cb2 = st.columns(2)
+            if cb1.button("Partial", key="bit_p"): execute_bulk_update_final("Partial", "Receive at Bitung")
+            if cb2.button("Complete", key="bit_c"): execute_bulk_update_final("Complete", "Receive at Bitung")
+            
+        with c_site:
+            st.write("**⛰️ Set Site**")
+            cs1, cs2 = st.columns(2)
+            if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
+            if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
     with tab_daily:
         st.markdown("### 📅 Daily Update")
@@ -278,6 +279,7 @@ else:
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.')), cv2.multiselect("Fleet", get_v_options('Fleet')), cv3.multiselect("Unit", get_v_options('Unit no')), cv4.multiselect("Status", get_v_options('Status'))
     search_viewer = st.text_input("Global Search:", placeholder="Cari...", key="gs_v")
+    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
