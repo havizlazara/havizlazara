@@ -218,13 +218,16 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
-    # --- TAB BULK STATUS (RESTORED PARTIAL/COMPLETE OPTIONS) ---
     with tab_bulk:
         st.markdown("### 🛠️ Bulk Update Status")
-        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}")
+        # FIX: Agar bisa copas banyak baris sekaligus
+        input_bulk = st.data_editor(
+            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"bulk_editor_{st.session_state.bulk_key}"
+        )
         
-        
-
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -240,18 +243,14 @@ if st.session_state['authenticated']:
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
 
         c_out, c_bitung, c_site = st.columns(3)
-        
         with c_out:
             st.write("**🔴 Reset Status**")
-            if st.button("Set Outstanding", use_container_width=True): 
-                execute_bulk_update_final("Outstanding", "")
-        
+            if st.button("Set Outstanding", use_container_width=True): execute_bulk_update_final("Outstanding", "")
         with c_bitung:
             st.write("**🚢 Set Bitung**")
             cb1, cb2 = st.columns(2)
             if cb1.button("Partial", key="bit_p"): execute_bulk_update_final("Partial", "Receive at Bitung")
             if cb2.button("Complete", key="bit_c"): execute_bulk_update_final("Complete", "Receive at Bitung")
-            
         with c_site:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
@@ -260,7 +259,13 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update")
-        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}")
+        # FIX: Agar bisa copas banyak baris sekaligus
+        daily_input = st.data_editor(
+            pd.DataFrame(columns=COLUMNS_ORDER), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"daily_editor_{st.session_state.daily_key}"
+        )
         if st.button("🚀 INSERT & AUTO SAVE"):
             clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new.empty:
