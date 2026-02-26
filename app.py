@@ -56,10 +56,14 @@ def show_success_modal(message):
     if st.button("Done update"):
         st.rerun()
 
+# --- FUNGSI SAVE CLOUD GLOBAL ---
 def save_final_changes(df_to_save):
     try:
+        # Bersihkan dari kolom dummy 'Pilih' jika ada
         df_clean = df_to_save.drop(columns=['Pilih'], errors='ignore')
+        # Kirim ke Google Sheets
         conn.update(data=df_clean)
+        # Clear Cache agar data baru langsung tampil
         st.cache_data.clear()
         st.session_state.df_master = df_clean
         return True
@@ -111,7 +115,6 @@ st.markdown(f"""
     .giant-title {{ font-size: 50px; font-weight: 900; color: white !important; background: rgba(31, 78, 121, 0.8); padding: 10px 40px; border-radius: 15px; }}
     .header-sub {{ color: white; font-size: 40px !important; font-weight: 800; letter-spacing: 5px; text-shadow: 3px 3px 6px black; margin-top: 15px; }}
     button[data-baseweb="tab"] div p {{ font-size: 32px !important; font-weight: bold !important; }}
-    [data-testid="stTableColumnHeaderCell"] div {{ font-size: 40px !important; font-weight: 900 !important; color: #1f4e79 !important; }}
     .metric-card {{ background: white; border-radius: 10px; padding: 15px; text-align: center; border-bottom: 5px solid #1f4e79; }}
     </style>
     """, unsafe_allow_html=True)
@@ -120,7 +123,6 @@ st.markdown(f"""<div class="custom-header"><div style="background:white;padding:
 
 # --- 5. TABS LOGIC ---
 if st.session_state['authenticated']:
-    # URUTAN TAB DISESUAIKAN (Dashboard -> Daily Update -> Personal -> Update Status)
     tab_monitor, tab_daily, tab_personal, tab_bulk = st.tabs(["📊 DASHBOARD", "📅 DAILY UPDATE", "👤 PERSONAL DASHBOARD", "🛠️ UPDATE STATUS"])
     
     with tab_monitor:
@@ -184,6 +186,7 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
+    # --- TAB PERSONAL (PERBAIKAN LOGIKA SAVE GSHEETS) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
@@ -202,21 +205,33 @@ if st.session_state['authenticated']:
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
-            master_final = st.session_state.df_master.copy()
+            
+            # REVISI: Ambil master data paling segar sebelum update
+            master_final = load_data() 
             updated_count = 0
+            
             for _, row in edited_p_df.iterrows():
                 po_num, po_itm = str(row['PO No']).strip(), str(row['PO Item']).strip()
+                # Cari baris yang tepat di master berdasarkan kunci unik
                 mask = (master_final['PO No'] == po_num) & (master_final['PO Item'] == po_itm)
+                
                 if mask.any():
                     old_note = str(master_final.loc[mask, 'Delivery Note'].values[0]).strip()
                     new_note = str(row['Delivery Note']).strip()
+                    
+                    # Update tanggal jika ada perubahan catatan
                     if old_note != new_note:
                         master_final.loc[mask, 'Last Update'] = today_str
                         updated_count += 1
+                    
+                    # Update semua kolom dari tabel personal ke master database
                     for col in PERSONAL_COLS:
-                        if col != 'Last Update': master_final.loc[mask, col] = str(row[col])
+                        if col != 'Last Update':
+                            master_final.loc[mask, col] = str(row[col])
+            
+            # Eksekusi simpan paksa ke GSheets
             if save_final_changes(master_final):
-                show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
+                show_success_modal(f"Berhasil Merevisi {updated_count} baris dan sudah Tersimpan di Cloud!")
 
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
@@ -224,7 +239,7 @@ if st.session_state['authenticated']:
         
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
-            master_b_update = st.session_state.df_master.copy()
+            master_b_update = load_data()
             updated = 0
             for _, r in input_bulk.iterrows():
                 p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
