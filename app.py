@@ -56,14 +56,19 @@ def show_success_modal(message):
     if st.button("Done update"):
         st.rerun()
 
-def save_to_gsheets(df_to_save):
+# --- REVISI SAVE: Menangani editan langsung di Status/Kolom lain ---
+def save_final_changes(edited_df):
     try:
-        df_clean = df_to_save.drop(columns=['Pilih'], errors='ignore')
-        conn.update(data=df_clean)
+        # Hapus kolom dummy 'Pilih'
+        df_to_save = edited_df.drop(columns=['Pilih'], errors='ignore')
+        # Update Master di GSheets
+        conn.update(data=df_to_save)
         st.cache_data.clear()
+        # Update session state lokal agar sinkron
+        st.session_state.df_master = df_to_save
         return True
     except Exception as e:
-        st.error(f"Gagal simpan ke Cloud: {e}")
+        st.error(f"Gagal simpan: {e}")
         return False
 
 # --- 3. SIDEBAR (LOGIN) ---
@@ -139,7 +144,6 @@ if st.session_state['authenticated']:
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
-        # Fix Outstanding logic case-insensitive
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
 
@@ -150,7 +154,6 @@ if st.session_state['authenticated']:
                 pic_data.columns = ['PIC_Name', 'Count']
                 st.plotly_chart(px.bar(pic_data, x='PIC_Name', y='Count', color='PIC_Name', height=350, title="By PIC", text='Count'), use_container_width=True)
             with g2:
-                # PERBAIKAN PIE CHART: Standarisasi Kategori
                 df_pie = df_f.copy()
                 def clean_status(s):
                     s = str(s).strip().capitalize()
@@ -169,11 +172,28 @@ if st.session_state['authenticated']:
         st.markdown("---")
         df_ed = df_f.copy()
         if 'Pilih' not in df_ed.columns: df_ed.insert(0, 'Pilih', False)
-        # PERBAIKAN TINGGI TABEL (Naik ke 800)
-        st.data_editor(df_ed, use_container_width=True, hide_index=True, height=800, key="main_editor", column_config={"Delivery Date": st.column_config.TextColumn("Delivery Date"), "Doc Date": st.column_config.TextColumn("Doc Date"), "Last Update": st.column_config.TextColumn("Last Update", disabled=True)})
+        
+        # PERBAIKAN TINGGI TABEL DINAMIS: (Jumlah baris * 35px) + Header
+        dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
+        
+        # TABEL UTAMA (Admin bisa edit langsung Status di sini)
+        main_editor_data = st.data_editor(
+            df_ed, use_container_width=True, hide_index=True, height=dynamic_height, 
+            key="main_editor", 
+            column_config={
+                "Delivery Date": st.column_config.TextColumn("Delivery Date"), 
+                "Doc Date": st.column_config.TextColumn("Doc Date"), 
+                "Last Update": st.column_config.TextColumn("Last Update", disabled=True)
+            }
+        )
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary"):
-            if save_to_gsheets(st.session_state.df_master):
+            # Gabungkan hasil editan tabel dengan data master asli
+            master_copy = st.session_state.df_master.copy()
+            # Sinkronisasi data yang difilter kembali ke master
+            master_copy.update(main_editor_data) 
+            
+            if save_final_changes(master_copy):
                 show_success_modal("Data Berhasil Disimpan ke Google Sheets!")
 
     with tab_personal:
@@ -189,23 +209,24 @@ if st.session_state['authenticated']:
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         
-        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=600, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        p_dynamic_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
+        edited_p = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_dynamic_height, key="personal_editor", column_config={"Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
+            master_p_update = st.session_state.df_master.copy()
             updated_p = 0
             for idx, row in edited_p.iterrows():
                 p_no, p_item = str(row['PO No']).strip(), str(row['PO Item']).strip()
-                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
+                mask = (master_p_update['PO No'] == p_no) & (master_p_update['PO Item'] == p_item)
                 if mask.any():
-                    if str(st.session_state.df_master.loc[mask, 'Delivery Note'].values[0]) != str(row['Delivery Note']):
-                        st.session_state.df_master.loc[mask, 'Delivery Note'] = str(row['Delivery Note'])
-                        st.session_state.df_master.loc[mask, 'Last Update'] = today_str
+                    if str(master_p_update.loc[mask, 'Delivery Note'].values[0]) != str(row['Delivery Note']):
+                        master_p_update.loc[mask, 'Last Update'] = today_str
                         updated_p += 1
                     for col in PERSONAL_COLS:
-                        if col not in ['Last Update', 'Delivery Note']: st.session_state.df_master.loc[mask, col] = str(row[col])
+                        master_p_update.loc[mask, col] = str(row[col])
             
-            if save_to_gsheets(st.session_state.df_master):
+            if save_final_changes(master_p_update):
                 show_success_modal("Berhasil Merevisi Data & Simpan ke Cloud!")
 
     with tab_bulk:
@@ -214,14 +235,15 @@ if st.session_state['authenticated']:
         
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
+            master_b_update = st.session_state.df_master.copy()
             updated = 0
             for _, r in input_bulk.iterrows():
                 p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
-                mask = (st.session_state.df_master['PO No'] == p_no) & (st.session_state.df_master['PO Item'] == p_item)
+                mask = (master_b_update['PO No'] == p_no) & (master_b_update['PO Item'] == p_item)
                 if mask.any() and p_no != "":
-                    st.session_state.df_master.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
+                    master_b_update.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
                     updated += 1
-            if updated > 0 and save_to_gsheets(st.session_state.df_master):
+            if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
 
@@ -238,8 +260,8 @@ if st.session_state['authenticated']:
             if not clean_new.empty:
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 clean_new['Status'], clean_new['Last Update'] = "Outstanding", today_str
-                st.session_state.df_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
-                if save_to_gsheets(st.session_state.df_master):
+                new_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
+                if save_final_changes(new_master):
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
@@ -253,12 +275,11 @@ else:
     search_viewer = st.text_input("Global Search:", placeholder="Cari...", key="gs_v")
     
     df_v = df_v_master.copy()
-    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
-    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
-    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
-    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
+    if fv_dept: df_v = df_v[fv_dept]
+    if fv_fleet: df_v = df_v[fv_fleet]
+    if fv_unit: df_v = df_v[fv_unit]
+    if fv_stat: df_v = df_v[fv_stat]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     
-    st.markdown("---")
-    st.markdown("### 📋 Database Monitoring (View Only)")
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=800)
+    v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
+    st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height)
