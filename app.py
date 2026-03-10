@@ -180,7 +180,6 @@ if st.session_state['authenticated']:
                 df_pie['Clean_Status'] = df_pie['Status'].apply(clean_status)
                 st.plotly_chart(px.pie(df_pie, names='Clean_Status', hole=.4, height=350, title="By Status", color='Clean_Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'}), use_container_width=True)
             with g3:
-                # PERBAIKAN: Membuang Unit No yang kosong agar tidak muncul di chart
                 df_unit_chart = df_f[df_f['Unit no'].str.strip() != ""]
                 unit_data = df_unit_chart['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_data.columns = ['Unit_No', 'Count']
@@ -261,6 +260,7 @@ if st.session_state['authenticated']:
             if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
+        
         c1, c2, c3 = st.columns(3)
         with c1:
             st.write("**🔴 Reset Status**")
@@ -273,8 +273,9 @@ if st.session_state['authenticated']:
         with c3:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
+            # REVISI: Tombol Complete sekarang berada di sebelah kanan Partial
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
-            if cb2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
+            if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
 else:
     # --- VIEWER MODE ---
@@ -293,14 +294,11 @@ else:
     v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], key="date_v")
     
     df_v = df_v_master.copy()
-    
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
-    
-    if search_viewer: 
-        df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
