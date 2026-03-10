@@ -134,13 +134,11 @@ if st.session_state['authenticated']:
         c1, c2, c3, c4 = st.columns(4)
         f_dept, f_fleet, f_unit, f_stat = c1.multiselect("Dept", get_options('Dept.')), c2.multiselect("Fleet", get_options('Fleet')), c3.multiselect("Unit", get_options('Unit no')), c4.multiselect("Status", get_options('Status'))
         
-        # PERBAIKAN: Layout Filter Date Range di sebelah Global Search
         cs1, cs2 = st.columns([2, 1])
         search_q = cs1.text_input("Global Search:", placeholder="Cari...", key="gs_admin")
         
-        # LOGIKA FILTER DOC DATE (RANGE)
-        with cs2:
-            date_range = st.date_input("Filter Doc Date Range:", value=[], placeholder="Pilih rentang tanggal")
+        # FIX: Menggunakan tuple () alih-alih list [] untuk value date_input
+        date_range = cs2.date_input("Filter Doc Date Range:", value=(), placeholder="Pilih rentang tanggal", key="date_admin")
 
         df_f = df_master_cur.copy()
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
@@ -149,16 +147,15 @@ if st.session_state['authenticated']:
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
-        # Eksekusi Filter Tanggal jika range sudah dipilih lengkap (Start & End)
-        if isinstance(date_range, list) and len(date_range) == 2:
+        # Filter Tanggal
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
-                df_f['Doc Date DT'] = pd.to_datetime(df_f['Doc Date'], errors='coerce')
+                df_f['Doc Date DT'] = pd.to_datetime(df_f['Doc Date'], dayfirst=True, errors='coerce')
                 start_date = pd.to_datetime(date_range[0])
                 end_date = pd.to_datetime(date_range[1])
                 df_f = df_f[(df_f['Doc Date DT'] >= start_date) & (df_f['Doc Date DT'] <= end_date)]
                 df_f = df_f.drop(columns=['Doc Date DT'])
-            except:
-                pass
+            except: pass
 
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
@@ -275,7 +272,7 @@ if st.session_state['authenticated']:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
-            if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
+            if cb2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
 else:
     # --- VIEWER MODE ---
@@ -286,10 +283,11 @@ else:
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.')), cv2.multiselect("Fleet", get_v_options('Fleet')), cv3.multiselect("Unit", get_v_options('Unit no')), cv4.multiselect("Status", get_v_options('Status'))
     
-    # Filter Date & Search untuk Viewer
     csv1, csv2 = st.columns([2, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari...", key="gs_v")
-    v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], placeholder="Pilih rentang tanggal", key="date_v")
+    
+    # FIX: Menggunakan tuple () alih-alih list [] untuk Viewer
+    v_date_range = csv2.date_input("Filter Doc Date Range:", value=(), placeholder="Pilih rentang tanggal", key="date_v")
     
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
@@ -298,9 +296,9 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     
-    if isinstance(v_date_range, list) and len(v_date_range) == 2:
+    if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
-            df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], errors='coerce')
+            df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
