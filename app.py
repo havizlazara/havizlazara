@@ -84,6 +84,9 @@ with st.sidebar:
         st.success("Admin Active ✅")
         if st.button("Logout"):
             st.session_state['authenticated'] = False
+            # Reset keys saat logout untuk menghindari duplicate elemen
+            st.session_state.daily_key += 1
+            st.session_state.bulk_key += 1
             st.rerun()
     
     st.markdown("---")
@@ -168,7 +171,13 @@ if st.session_state['authenticated']:
 
     with tab_daily:
         st.markdown("### 📅 Daily Update")
-        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}")
+        # PERBAIKAN: Key unik menggunakan status admin untuk mencegah tabrakan ID
+        daily_input = st.data_editor(
+            pd.DataFrame(columns=COLUMNS_ORDER), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"daily_editor_admin_{st.session_state.daily_key}"
+        )
         if st.button("🚀 INSERT & AUTO SAVE"):
             clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new.empty:
@@ -192,13 +201,12 @@ if st.session_state['authenticated']:
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         
-        # PERBAIKAN: Kolom Dept, Fleet, dan Unit no sekarang bisa diedit (disabled=False)
         edited_p_df = st.data_editor(
             df_p[PERSONAL_COLS], 
             use_container_width=True, 
             hide_index=True, 
             height=p_height, 
-            key="personal_editor", 
+            key=f"personal_editor_admin", # Key unik
             num_rows="fixed", 
             column_config={
                 "Dept.": st.column_config.TextColumn("Dept.", disabled=False),
@@ -230,7 +238,12 @@ if st.session_state['authenticated']:
 
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
-        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_{st.session_state.bulk_key}")
+        input_bulk = st.data_editor(
+            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"bulk_editor_admin_{st.session_state.bulk_key}" # Key unik
+        )
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -259,19 +272,6 @@ if st.session_state['authenticated']:
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
             if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
-    with tab_daily:
-        st.markdown("### 📅 Daily Update")
-        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_{st.session_state.daily_key}")
-        if st.button("🚀 INSERT & AUTO SAVE"):
-            clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
-            if not clean_new.empty:
-                today_str = datetime.now().strftime("%d-%m-%Y")
-                clean_new['Status'], clean_new['Last Update'] = "Outstanding", today_str
-                new_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
-                if save_final_changes(new_master):
-                    st.session_state.daily_key += 1
-                    show_success_modal("Data Baru Berhasil Masuk Cloud!")
-
 else:
     # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring")
@@ -287,4 +287,5 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height)
+    # Gunakan key unik untuk viewer
+    st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
