@@ -25,7 +25,6 @@ COLUMNS_ORDER = [
     'Last Update', 'Delivery Note'
 ]
 
-# Kolom Personal Dashboard
 PERSONAL_COLS = [
     'Dept.', 'Fleet', 'Unit no', 
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
@@ -132,11 +131,10 @@ if st.session_state['authenticated']:
         def get_options(col): return sorted([str(x).strip() for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
         
         c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", get_options('Dept.'))
-        f_fleet = c2.multiselect("Fleet", get_options('Fleet'))
-        # Filter Unit yang diperbaiki agar lebih spesifik
-        f_unit = c3.multiselect("Unit", get_options('Unit no'))
-        f_stat = c4.multiselect("Status", get_options('Status'))
+        f_dept = c1.multiselect("Dept", get_options('Dept.'), key="m_dept")
+        f_fleet = c2.multiselect("Fleet", get_options('Fleet'), key="m_fleet")
+        f_unit = c3.multiselect("Unit", get_options('Unit no'), key="m_unit")
+        f_stat = c4.multiselect("Status", get_options('Status'), key="m_stat")
         
         cs1, cs2 = st.columns([2, 1])
         search_q = cs1.text_input("Global Search:", placeholder="Cari...", key="gs_admin")
@@ -144,13 +142,15 @@ if st.session_state['authenticated']:
 
         df_f = df_master_cur.copy()
         
-        # PERBAIKAN LOGIKA FILTER: Menggunakan isin() untuk pencocokan nilai yang eksak
-        if f_dept: df_f = df_f[df_f['Dept.'].astype(str).str.strip().isin(f_dept)]
-        if f_fleet: df_f = df_f[df_f['Fleet'].astype(str).str.strip().isin(f_fleet)]
-        if f_unit: df_f = df_f[df_f['Unit no'].astype(str).str.strip().isin(f_unit)]
-        if f_stat: df_f = df_f[df_f['Status'].astype(str).str.strip().isin(f_stat)]
+        # LOGIKA FILTER SPESIFIK (EXACT MATCH)
+        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+        if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
+        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)] # Hanya yang dipilih persis
+        if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         
-        if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+        if search_q: 
+            # Global search tetap contains, tapi filter unit di atas akan mempersempit
+            df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
@@ -274,7 +274,7 @@ if st.session_state['authenticated']:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
-            if cb2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
+            if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
 else:
     # --- VIEWER MODE ---
@@ -283,20 +283,23 @@ else:
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
     
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", get_v_options('Dept.'))
-    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'))
-    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'))
-    fv_stat = cv4.multiselect("Status", get_v_options('Status'))
+    fv_dept = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept")
+    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
+    fv_stat = cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
     
     csv1, csv2 = st.columns([2, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari...", key="gs_v")
     v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], key="date_v")
     
     df_v = df_v_master.copy()
-    if fv_dept: df_v = df_v[df_v['Dept.'].astype(str).str.strip().isin(fv_dept)]
-    if fv_fleet: df_v = df_v[df_v['Fleet'].astype(str).str.strip().isin(fv_fleet)]
-    if fv_unit: df_v = df_v[df_v['Unit no'].astype(str).str.strip().isin(fv_unit)]
-    if fv_stat: df_v = df_v[df_v['Status'].astype(str).str.strip().isin(fv_stat)]
+    
+    # PERBAIKAN LOGIKA FILTER VIEWER (EXACT MATCH)
+    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
+    if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
+    if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
+    if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
+    
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
