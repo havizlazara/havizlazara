@@ -84,7 +84,6 @@ with st.sidebar:
         st.success("Admin Active ✅")
         if st.button("Logout"):
             st.session_state['authenticated'] = False
-            # Reset keys saat logout untuk menghindari duplicate elemen
             st.session_state.daily_key += 1
             st.session_state.bulk_key += 1
             st.rerun()
@@ -131,20 +130,42 @@ if st.session_state['authenticated']:
         st.markdown("### 🔍 Filter Monitoring")
         df_master_cur = st.session_state.df_master.copy()
         def get_options(col): return sorted([str(x) for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
+        
         c1, c2, c3, c4 = st.columns(4)
         f_dept, f_fleet, f_unit, f_stat = c1.multiselect("Dept", get_options('Dept.')), c2.multiselect("Fleet", get_options('Fleet')), c3.multiselect("Unit", get_options('Unit no')), c4.multiselect("Status", get_options('Status'))
+        
+        # PERBAIKAN: Layout Filter Date Range di sebelah Global Search
+        cs1, cs2 = st.columns([2, 1])
+        search_q = cs1.text_input("Global Search:", placeholder="Cari...", key="gs_admin")
+        
+        # LOGIKA FILTER DOC DATE (RANGE)
+        with cs2:
+            date_range = st.date_input("Filter Doc Date Range:", value=[], placeholder="Pilih rentang tanggal")
+
         df_f = df_master_cur.copy()
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
         if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-        search_q = st.text_input("Global Search:", placeholder="Cari...", key="gs_admin")
         if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+        
+        # Eksekusi Filter Tanggal jika range sudah dipilih lengkap (Start & End)
+        if isinstance(date_range, list) and len(date_range) == 2:
+            try:
+                df_f['Doc Date DT'] = pd.to_datetime(df_f['Doc Date'], errors='coerce')
+                start_date = pd.to_datetime(date_range[0])
+                end_date = pd.to_datetime(date_range[1])
+                df_f = df_f[(df_f['Doc Date DT'] >= start_date) & (df_f['Doc Date DT'] <= end_date)]
+                df_f = df_f.drop(columns=['Doc Date DT'])
+            except:
+                pass
+
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
         m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+
         if not df_f.empty:
             g1, g2, g3 = st.columns(3)
             with g1:
@@ -165,19 +186,14 @@ if st.session_state['authenticated']:
                 unit_data = df_f['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units", text='Count'), use_container_width=True)
+
         st.markdown("---")
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
 
     with tab_daily:
         st.markdown("### 📅 Daily Update")
-        # PERBAIKAN: Key unik menggunakan status admin untuk mencegah tabrakan ID
-        daily_input = st.data_editor(
-            pd.DataFrame(columns=COLUMNS_ORDER), 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key=f"daily_editor_admin_{st.session_state.daily_key}"
-        )
+        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_admin_{st.session_state.daily_key}")
         if st.button("🚀 INSERT & AUTO SAVE"):
             clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new.empty:
@@ -201,13 +217,7 @@ if st.session_state['authenticated']:
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         
-        edited_p_df = st.data_editor(
-            df_p[PERSONAL_COLS], 
-            use_container_width=True, 
-            hide_index=True, 
-            height=p_height, 
-            key=f"personal_editor_admin", # Key unik
-            num_rows="fixed", 
+        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
             column_config={
                 "Dept.": st.column_config.TextColumn("Dept.", disabled=False),
                 "Fleet": st.column_config.TextColumn("Fleet", disabled=False),
@@ -238,12 +248,7 @@ if st.session_state['authenticated']:
 
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
-        input_bulk = st.data_editor(
-            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key=f"bulk_editor_admin_{st.session_state.bulk_key}" # Key unik
-        )
+        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -277,15 +282,28 @@ else:
     st.markdown("### 🔍 Filter Monitoring")
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x) for x in df_v_master[col].unique() if x])
+    
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.')), cv2.multiselect("Fleet", get_v_options('Fleet')), cv3.multiselect("Unit", get_v_options('Unit no')), cv4.multiselect("Status", get_v_options('Status'))
-    search_viewer = st.text_input("Global Search:", placeholder="Cari...", key="gs_v")
+    
+    # Filter Date & Search untuk Viewer
+    csv1, csv2 = st.columns([2, 1])
+    search_viewer = csv1.text_input("Global Search:", placeholder="Cari...", key="gs_v")
+    v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], placeholder="Pilih rentang tanggal", key="date_v")
+    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    
+    if isinstance(v_date_range, list) and len(v_date_range) == 2:
+        try:
+            df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], errors='coerce')
+            df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
+            df_v = df_v.drop(columns=['Doc Date DT'])
+        except: pass
+
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
-    # Gunakan key unik untuk viewer
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
