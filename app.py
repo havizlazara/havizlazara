@@ -137,8 +137,8 @@ if st.session_state['authenticated']:
         cs1, cs2 = st.columns([2, 1])
         search_q = cs1.text_input("Global Search:", placeholder="Cari...", key="gs_admin")
         
-        # PERBAIKAN: Menggunakan value=None agar tidak TypeError
-        date_range = cs2.date_input("Filter Doc Date Range:", value=None, placeholder="Pilih rentang tanggal", key="date_admin")
+        # FIX: Menggunakan format date_input yang paling aman
+        date_range = cs2.date_input("Filter Doc Date Range:", value=[], key="date_admin")
 
         df_f = df_master_cur.copy()
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
@@ -147,13 +147,11 @@ if st.session_state['authenticated']:
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
-        # Logika Filter Tanggal
-        if date_range and len(date_range) == 2:
+        # Logika Filter Tanggal (Safe Check)
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
                 df_f['Doc Date DT'] = pd.to_datetime(df_f['Doc Date'], dayfirst=True, errors='coerce')
-                start_date = pd.to_datetime(date_range[0])
-                end_date = pd.to_datetime(date_range[1])
-                df_f = df_f[(df_f['Doc Date DT'] >= start_date) & (df_f['Doc Date DT'] <= end_date)]
+                df_f = df_f[(df_f['Doc Date DT'] >= pd.to_datetime(date_range[0])) & (df_f['Doc Date DT'] <= pd.to_datetime(date_range[1]))]
                 df_f = df_f.drop(columns=['Doc Date DT'])
             except: pass
 
@@ -272,7 +270,7 @@ if st.session_state['authenticated']:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
-            if cb2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
+            if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
 else:
     # --- VIEWER MODE ---
@@ -286,8 +284,8 @@ else:
     csv1, csv2 = st.columns([2, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari...", key="gs_v")
     
-    # PERBAIKAN: Menggunakan value=None untuk Viewer
-    v_date_range = csv2.date_input("Filter Doc Date Range:", value=None, placeholder="Pilih rentang tanggal", key="date_v")
+    # PERBAIKAN: Menggunakan format yang paling aman tanpa parameter placeholder/value=None
+    v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], key="date_v")
     
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
@@ -296,7 +294,7 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
     
-    if v_date_range and len(v_date_range) == 2:
+    if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
