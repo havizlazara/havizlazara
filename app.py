@@ -133,7 +133,6 @@ if st.session_state['authenticated']:
         c1, c2, c3, c4 = st.columns(4)
         f_dept = c1.multiselect("Dept", get_options('Dept.'), key="m_dept")
         f_fleet = c2.multiselect("Fleet", get_options('Fleet'), key="m_fleet")
-        # Pencarian dalam kotak Unit tetap bisa diketik, namun filter ke tabel dibuat EXACT
         f_unit = c3.multiselect("Unit", get_options('Unit no'), key="m_unit")
         f_stat = c4.multiselect("Status", get_options('Status'), key="m_stat")
         
@@ -143,13 +142,11 @@ if st.session_state['authenticated']:
 
         df_f = df_master_cur.copy()
         
-        # PERBAIKAN LOGIKA: Exact Match menggunakan .isin() untuk semua filter dropdown
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
         if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
-        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)] # Ini akan mengunci LD031 dan membuang LD03001
+        if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         
-        # Global search tetap fleksibel (contains)
         if search_q: 
             df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
@@ -183,7 +180,9 @@ if st.session_state['authenticated']:
                 df_pie['Clean_Status'] = df_pie['Status'].apply(clean_status)
                 st.plotly_chart(px.pie(df_pie, names='Clean_Status', hole=.4, height=350, title="By Status", color='Clean_Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'}), use_container_width=True)
             with g3:
-                unit_data = df_f['Unit no'].value_counts().nlargest(5).reset_index()
+                # PERBAIKAN: Membuang Unit No yang kosong agar tidak muncul di chart
+                df_unit_chart = df_f[df_f['Unit no'].str.strip() != ""]
+                unit_data = df_unit_chart['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units", text='Count'), use_container_width=True)
 
@@ -295,7 +294,6 @@ else:
     
     df_v = df_v_master.copy()
     
-    # EXACT MATCH UNTUK VIEWER
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
