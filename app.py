@@ -199,21 +199,34 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
-    # --- TAB PERSONAL DASHBOARD (REVISI CHART) ---
+    # --- TAB PERSONAL DASHBOARD (REVISI METRICS & FILTER) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
-        cp1, cp2 = st.columns(2)
+        
+        # PERBAIKAN: Tambahkan Filter Status di samping PIC & PO
+        cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
+        
+        stat_opts = sorted([str(x) for x in df_p_master['Status'].unique() if x and str(x).lower() != 'nan'])
+        f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
+        
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
-        f_po_p = cp2.selectbox("Filter PO No:", options=["All"] + po_opts)
+        f_po_p = cp3.selectbox("Filter PO No:", options=["All"] + po_opts)
         
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
+        if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
 
-        # REVISI: TAMBAHKAN CHART UNTUK PERSONAL PIC
+        # PERBAIKAN: Tambahkan Metrics Info seperti di Main Dashboard
+        st.markdown("---")
+        pm1, pm2, pm3 = st.columns(3)
+        pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS (Filtered)</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
+        pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
+        pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+
         if not df_p.empty:
             gp1, gp2 = st.columns(2)
             with gp1:
