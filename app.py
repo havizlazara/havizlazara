@@ -141,14 +141,11 @@ if st.session_state['authenticated']:
         date_range = cs2.date_input("Filter Doc Date Range:", value=[], key="date_admin")
 
         df_f = df_master_cur.copy()
-        
         if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
         if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-        
-        if search_q: 
-            df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+        if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
@@ -202,6 +199,7 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
+    # --- TAB PERSONAL DASHBOARD (REVISI CHART) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
@@ -210,11 +208,31 @@ if st.session_state['authenticated']:
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p = cp2.selectbox("Filter PO No:", options=["All"] + po_opts)
+        
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
+
+        # REVISI: TAMBAHKAN CHART UNTUK PERSONAL PIC
+        if not df_p.empty:
+            gp1, gp2 = st.columns(2)
+            with gp1:
+                df_p_pie = df_p.copy()
+                def clean_status_p(s):
+                    s = str(s).strip().capitalize()
+                    if "Outstanding" in s: return "Outstanding"
+                    if "Partial" in s: return "Partial"
+                    if "Complete" in s: return "Complete"
+                    return s
+                df_p_pie['Clean_Status'] = df_p_pie['Status'].apply(clean_status_p)
+                st.plotly_chart(px.pie(df_p_pie, names='Clean_Status', hole=.4, height=350, title=f"Status for {f_pic_p}", color='Clean_Status', color_discrete_map={'Outstanding':'#ef4444', 'Complete':'#22c55e', 'Partial':'#f39c12'}), use_container_width=True)
+            with gp2:
+                df_p_unit = df_p[df_p['Unit no'].str.strip() != ""]
+                unit_p_data = df_p_unit['Unit no'].value_counts().nlargest(5).reset_index()
+                unit_p_data.columns = ['Unit_No', 'Count']
+                st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
+
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
             column_config={
                 "Dept.": st.column_config.TextColumn("Dept.", disabled=False),
@@ -260,7 +278,6 @@ if st.session_state['authenticated']:
             if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
-        
         c1, c2, c3 = st.columns(3)
         with c1:
             st.write("**🔴 Reset Status**")
@@ -273,7 +290,6 @@ if st.session_state['authenticated']:
         with c3:
             st.write("**⛰️ Set Site**")
             cs1, cs2 = st.columns(2)
-            # REVISI: Tombol Complete sekarang berada di sebelah kanan Partial
             if cs1.button("Partial", key="site_p"): execute_bulk_update_final("Partial", "Receive at Site")
             if cs2.button("Complete", key="site_c"): execute_bulk_update_final("Complete", "Receive at Site")
 
