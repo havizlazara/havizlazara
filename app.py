@@ -199,12 +199,11 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
-    # --- TAB PERSONAL DASHBOARD (REVISI METRICS & FILTER) ---
+    # --- TAB PERSONAL DASHBOARD (UPDATE FILTER SEPERTI MAIN) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
         
-        # PERBAIKAN: Tambahkan Filter Status di samping PIC & PO
         cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
@@ -214,13 +213,29 @@ if st.session_state['authenticated']:
         
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p = cp3.selectbox("Filter PO No:", options=["All"] + po_opts)
+
+        # REVISI: TAMBAHKAN GLOBAL SEARCH & DOC DATE RANGE DI SINI
+        csp1, csp2 = st.columns([2, 1])
+        search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
+        date_range_p = csp2.date_input("Filter Doc Date Range (Personal):", value=[], key="date_personal")
         
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
+        
+        # Eksekusi Global Search Personal
+        if search_p:
+            df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
+        
+        # Eksekusi Date Range Personal
+        if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
+            try:
+                df_p['Doc Date DT'] = pd.to_datetime(df_p['Doc Date'], dayfirst=True, errors='coerce')
+                df_p = df_p[(df_p['Doc Date DT'] >= pd.to_datetime(date_range_p[0])) & (df_p['Doc Date DT'] <= pd.to_datetime(date_range_p[1]))]
+                df_p = df_p.drop(columns=['Doc Date DT'])
+            except: pass
 
-        # PERBAIKAN: Tambahkan Metrics Info seperti di Main Dashboard
         st.markdown("---")
         pm1, pm2, pm3 = st.columns(3)
         pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS (Filtered)</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
