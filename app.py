@@ -136,13 +136,9 @@ if st.session_state['authenticated']:
         f_unit = c3.multiselect("Unit", get_options('Unit no'), key="m_unit")
         f_stat = c4.multiselect("Status", get_options('Status'), key="m_stat")
         
-        # Penambahan Filter PO No Multiselect di samping Global Search
         cs1, cs2, cs3 = st.columns([1.5, 1.5, 1])
         search_q = cs1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_admin")
-        
-        # Filter PO No (Multiple Search)
         f_po_multi = cs2.multiselect("Filter PO No:", get_options('PO No'), key="m_po_multi")
-        
         date_range = cs3.date_input("Filter Doc Date Range:", value=[], key="date_admin")
 
         df_f = df_master_cur.copy()
@@ -150,10 +146,7 @@ if st.session_state['authenticated']:
         if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
-        
-        # Eksekusi Filter Multiple PO No
         if f_po_multi: df_f = df_f[df_f['PO No'].isin(f_po_multi)]
-        
         if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
@@ -196,7 +189,7 @@ if st.session_state['authenticated']:
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
 
     with tab_daily:
-        st.markdown("### 📅 Daily Update")
+        st.markdown("### 📅 DAILY UPDATE")
         daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_admin_{st.session_state.daily_key}")
         if st.button("🚀 INSERT & AUTO SAVE"):
             clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
@@ -208,16 +201,21 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
+    # --- TAB PERSONAL DASHBOARD (FIXED MULTIPLE PO SEARCH) ---
     with tab_personal:
-        st.markdown("### 👤 Personal Monitoring & Revision")
+        st.markdown("### 👤 PERSONAL DASHBOARD")
         df_p_master = st.session_state.df_master.copy()
+        
         cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
+        
         stat_opts = sorted([str(x) for x in df_p_master['Status'].unique() if x and str(x).lower() != 'nan'])
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
+        
+        # PERBAIKAN: Diubah menjadi multiselect untuk pencarian multiple PO No
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
-        f_po_p = cp3.selectbox("Filter PO No:", options=["All"] + po_opts)
+        f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
 
         csp1, csp2 = st.columns([2, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
@@ -226,7 +224,8 @@ if st.session_state['authenticated']:
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
-        if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
+        # Filter multiple PO No
+        if f_po_p_multi: df_p = df_p[df_p['PO No'].isin(f_po_p_multi)]
         if search_p: df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
         if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
             try:
@@ -281,29 +280,21 @@ if st.session_state['authenticated']:
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
     with tab_bulk:
-        st.markdown("### 🛠️ Update Status")
-        input_bulk = st.data_editor(
-            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key=f"bulk_editor_admin_{st.session_state.bulk_key}"
-        )
+        st.markdown("### 🛠️ UPDATE STATUS")
+        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
         
         if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_copy = st.session_state.df_master.copy()
             updated_count = 0
-            
             for _, r in input_bulk.iterrows():
                 p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
                 mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
-                
                 if mask.any() and p_no != "":
                     master_copy.loc[mask, 'Status'] = "Outstanding"
                     master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
                     master_copy.loc[mask, 'Last Update'] = today_str
                     updated_count += 1
-            
             if updated_count > 0:
                 if save_final_changes(master_copy):
                     st.session_state.bulk_key += 1
@@ -346,16 +337,12 @@ else:
     st.markdown("### 🔍 Filter Monitoring")
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
-    
     cv1, cv2, cv3, cv4 = st.columns(4)
     fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept"), cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet"), cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit"), cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
-    
-    # Penempatan Multiple PO Filter di Mode Viewer juga
     csv1, csv2, csv3 = st.columns([1.5, 1.5, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_v")
     f_po_multi_v = csv2.multiselect("Filter PO No:", get_v_options('PO No'), key="v_po_multi")
     v_date_range = csv3.date_input("Filter Doc Date Range:", value=[], key="date_v")
-    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
@@ -363,7 +350,6 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if f_po_multi_v: df_v = df_v[df_v['PO No'].isin(f_po_multi_v)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
-    
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
