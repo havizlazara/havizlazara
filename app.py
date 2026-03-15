@@ -271,9 +271,10 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
-    # --- TAB UPDATE STATUS (REVISI: SAVE GSHEET & AUTO STATUS OUTSTANDING) ---
+    # --- TAB UPDATE STATUS (REVISI: AUTO RESET SETELAH SAVE) ---
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
+        # Menggunakan session_state.bulk_key agar tabel bisa dikosongkan secara instan
         input_bulk = st.data_editor(
             pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
             num_rows="dynamic", 
@@ -281,7 +282,6 @@ if st.session_state['authenticated']:
             key=f"bulk_editor_admin_{st.session_state.bulk_key}"
         )
         
-        # LOGIKA SAVE: Update teks & Otomatis set Status ke 'Outstanding'
         if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_copy = st.session_state.df_master.copy()
@@ -292,7 +292,6 @@ if st.session_state['authenticated']:
                 mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
                 
                 if mask.any() and p_no != "":
-                    # REVISI: Selalu set ke 'Outstanding' dan catat tanggal hari ini
                     master_copy.loc[mask, 'Status'] = "Outstanding"
                     master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
                     master_copy.loc[mask, 'Last Update'] = today_str
@@ -300,6 +299,8 @@ if st.session_state['authenticated']:
             
             if updated_count > 0:
                 if save_final_changes(master_copy):
+                    # REVISI: Tambahkan 1 ke bulk_key untuk mereset tabel editor agar kosong kembali
+                    st.session_state.bulk_key += 1
                     show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
             else:
                 st.warning("Silakan masukkan PO No dan PO Item di tabel.")
@@ -316,6 +317,7 @@ if st.session_state['authenticated']:
                     master_b_update.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
                     updated += 1
             if updated > 0 and save_final_changes(master_b_update):
+                # REVISI: Tambahkan juga di sini agar tombol bulk (Bitung/Site) juga mereset tabel
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
 
