@@ -271,7 +271,7 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
-    # --- TAB UPDATE STATUS (REVISI: TAMBAH TOMBOL SAVE GSHEET) ---
+    # --- TAB UPDATE STATUS (REVISI: SAVE GSHEET & AUTO STATUS OUTSTANDING) ---
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
         input_bulk = st.data_editor(
@@ -281,7 +281,7 @@ if st.session_state['authenticated']:
             key=f"bulk_editor_admin_{st.session_state.bulk_key}"
         )
         
-        # LOGIKA SAVE MANUAL UNTUK EDITAN DI TABEL (REVISI)
+        # LOGIKA SAVE: Update teks & Otomatis set Status ke 'Outstanding'
         if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_copy = st.session_state.df_master.copy()
@@ -292,22 +292,17 @@ if st.session_state['authenticated']:
                 mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
                 
                 if mask.any() and p_no != "":
-                    # Deteksi jika ada perubahan pada Delivery Note atau Status
-                    old_note = str(master_copy.loc[mask, 'Delivery Note'].values[0]).strip()
-                    new_note = str(r['Delivery Note']).strip()
-                    
-                    if old_note != new_note or str(master_copy.loc[mask, 'Status'].values[0]) != str(r['Status']):
-                        master_copy.loc[mask, 'Last Update'] = today_str
-                        updated_count += 1
-                    
-                    master_copy.loc[mask, 'Status'] = str(r['Status'])
-                    master_copy.loc[mask, 'Delivery Note'] = new_note
+                    # REVISI: Selalu set ke 'Outstanding' dan catat tanggal hari ini
+                    master_copy.loc[mask, 'Status'] = "Outstanding"
+                    master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
+                    master_copy.loc[mask, 'Last Update'] = today_str
+                    updated_count += 1
             
             if updated_count > 0:
                 if save_final_changes(master_copy):
-                    show_success_modal(f"Berhasil mengupdate {updated_count} data!")
+                    show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
             else:
-                st.warning("Tidak ada perubahan data yang dideteksi.")
+                st.warning("Silakan masukkan PO No dan PO Item di tabel.")
 
         st.markdown("---")
         def execute_bulk_update_final(status_val, note_val):
