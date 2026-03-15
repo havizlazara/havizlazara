@@ -199,22 +199,17 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
-    # --- TAB PERSONAL DASHBOARD (UPDATE FILTER SEPERTI MAIN) ---
     with tab_personal:
         st.markdown("### 👤 Personal Monitoring & Revision")
         df_p_master = st.session_state.df_master.copy()
-        
         cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
-        
         stat_opts = sorted([str(x) for x in df_p_master['Status'].unique() if x and str(x).lower() != 'nan'])
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
-        
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p = cp3.selectbox("Filter PO No:", options=["All"] + po_opts)
 
-        # REVISI: TAMBAHKAN GLOBAL SEARCH & DOC DATE RANGE DI SINI
         csp1, csp2 = st.columns([2, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
         date_range_p = csp2.date_input("Filter Doc Date Range (Personal):", value=[], key="date_personal")
@@ -223,12 +218,7 @@ if st.session_state['authenticated']:
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
         if f_po_p != "All": df_p = df_p[df_p['PO No'] == f_po_p]
-        
-        # Eksekusi Global Search Personal
-        if search_p:
-            df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
-        
-        # Eksekusi Date Range Personal
+        if search_p: df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
         if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
             try:
                 df_p['Doc Date DT'] = pd.to_datetime(df_p['Doc Date'], dayfirst=True, errors='coerce')
@@ -238,7 +228,7 @@ if st.session_state['authenticated']:
 
         st.markdown("---")
         pm1, pm2, pm3 = st.columns(3)
-        pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS (Filtered)</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
+        pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
         pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
         pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
 
@@ -261,16 +251,7 @@ if st.session_state['authenticated']:
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
 
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
-            column_config={
-                "Dept.": st.column_config.TextColumn("Dept.", disabled=False),
-                "Fleet": st.column_config.TextColumn("Fleet", disabled=False),
-                "Unit no": st.column_config.TextColumn("Unit no", disabled=False),
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True), 
-                "PO No": st.column_config.TextColumn("PO No", disabled=True), 
-                "PO Item": st.column_config.TextColumn("PO Item", disabled=True)
-            }
-        )
+        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config={"Dept.": st.column_config.TextColumn("Dept.", disabled=False), "Fleet": st.column_config.TextColumn("Fleet", disabled=False), "Unit no": st.column_config.TextColumn("Unit no", disabled=False), "Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -290,9 +271,45 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
+    # --- TAB UPDATE STATUS (REVISI: TAMBAH TOMBOL SAVE GSHEET) ---
     with tab_bulk:
         st.markdown("### 🛠️ Update Status")
-        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
+        input_bulk = st.data_editor(
+            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"bulk_editor_admin_{st.session_state.bulk_key}"
+        )
+        
+        # LOGIKA SAVE MANUAL UNTUK EDITAN DI TABEL (REVISI)
+        if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table"):
+            today_str = datetime.now().strftime("%d-%m-%Y")
+            master_copy = st.session_state.df_master.copy()
+            updated_count = 0
+            
+            for _, r in input_bulk.iterrows():
+                p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
+                mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
+                
+                if mask.any() and p_no != "":
+                    # Deteksi jika ada perubahan pada Delivery Note atau Status
+                    old_note = str(master_copy.loc[mask, 'Delivery Note'].values[0]).strip()
+                    new_note = str(r['Delivery Note']).strip()
+                    
+                    if old_note != new_note or str(master_copy.loc[mask, 'Status'].values[0]) != str(r['Status']):
+                        master_copy.loc[mask, 'Last Update'] = today_str
+                        updated_count += 1
+                    
+                    master_copy.loc[mask, 'Status'] = str(r['Status'])
+                    master_copy.loc[mask, 'Delivery Note'] = new_note
+            
+            if updated_count > 0:
+                if save_final_changes(master_copy):
+                    show_success_modal(f"Berhasil mengupdate {updated_count} data!")
+            else:
+                st.warning("Tidak ada perubahan data yang dideteksi.")
+
+        st.markdown("---")
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_b_update = st.session_state.df_master.copy()
@@ -306,6 +323,7 @@ if st.session_state['authenticated']:
             if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
                 show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
+
         c1, c2, c3 = st.columns(3)
         with c1:
             st.write("**🔴 Reset Status**")
@@ -326,30 +344,22 @@ else:
     st.markdown("### 🔍 Filter Monitoring")
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
-    
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
-    fv_stat = cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
-    
+    fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept"), cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet"), cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit"), cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
     csv1, csv2 = st.columns([2, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_v")
     v_date_range = csv2.date_input("Filter Doc Date Range:", value=[], key="date_v")
-    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
-    
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
-
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
