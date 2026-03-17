@@ -201,19 +201,14 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
-    # --- TAB PERSONAL DASHBOARD (FIXED MULTIPLE PO SEARCH) ---
     with tab_personal:
         st.markdown("### 👤 PERSONAL DASHBOARD")
         df_p_master = st.session_state.df_master.copy()
-        
         cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
-        
         stat_opts = sorted([str(x) for x in df_p_master['Status'].unique() if x and str(x).lower() != 'nan'])
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
-        
-        # PERBAIKAN: Diubah menjadi multiselect untuk pencarian multiple PO No
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
 
@@ -224,7 +219,6 @@ if st.session_state['authenticated']:
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
-        # Filter multiple PO No
         if f_po_p_multi: df_p = df_p[df_p['PO No'].isin(f_po_p_multi)]
         if search_p: df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
         if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
@@ -279,28 +273,55 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
+    # --- TAB UPDATE STATUS (REVISI: TAMBAH TOMBOL DELETE) ---
     with tab_bulk:
         st.markdown("### 🛠️ UPDATE STATUS")
-        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
+        input_bulk = st.data_editor(
+            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"bulk_editor_admin_{st.session_state.bulk_key}"
+        )
         
-        if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table"):
-            today_str = datetime.now().strftime("%d-%m-%Y")
-            master_copy = st.session_state.df_master.copy()
-            updated_count = 0
-            for _, r in input_bulk.iterrows():
-                p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
-                mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
-                if mask.any() and p_no != "":
-                    master_copy.loc[mask, 'Status'] = "Outstanding"
-                    master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
-                    master_copy.loc[mask, 'Last Update'] = today_str
-                    updated_count += 1
-            if updated_count > 0:
-                if save_final_changes(master_copy):
-                    st.session_state.bulk_key += 1
-                    show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
-            else:
-                st.warning("Silakan masukkan PO No dan PO Item di tabel.")
+        c_save, c_del = st.columns(2)
+        with c_save:
+            if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table", use_container_width=True):
+                today_str = datetime.now().strftime("%d-%m-%Y")
+                master_copy = st.session_state.df_master.copy()
+                updated_count = 0
+                for _, r in input_bulk.iterrows():
+                    p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
+                    mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
+                    if mask.any() and p_no != "":
+                        master_copy.loc[mask, 'Status'] = "Outstanding"
+                        master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
+                        master_copy.loc[mask, 'Last Update'] = today_str
+                        updated_count += 1
+                if updated_count > 0:
+                    if save_final_changes(master_copy):
+                        st.session_state.bulk_key += 1
+                        show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
+                else: st.warning("Silakan masukkan PO No dan PO Item.")
+
+        # FITUR DELETE BARU
+        with c_del:
+            if st.button("🗑️ DELETE SELECTED PO", type="secondary", key="delete_bulk_table", use_container_width=True):
+                master_del = st.session_state.df_master.copy()
+                initial_count = len(master_del)
+                
+                for _, r in input_bulk.iterrows():
+                    p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
+                    if p_no != "":
+                        # Menghapus baris yang cocok dengan PO No dan PO Item
+                        master_del = master_del[~((master_del['PO No'] == p_no) & (master_del['PO Item'] == p_item))]
+                
+                deleted_count = initial_count - len(master_del)
+                
+                if deleted_count > 0:
+                    if save_final_changes(master_del):
+                        st.session_state.bulk_key += 1
+                        show_success_modal(f"Berhasil menghapus {deleted_count} baris dari database!")
+                else: st.warning("Data PO yang dicari tidak ditemukan untuk dihapus.")
 
         st.markdown("---")
         def execute_bulk_update_final(status_val, note_val):
