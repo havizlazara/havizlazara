@@ -50,6 +50,13 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
+# Fungsi Utility Download Excel
+def to_excel_buffer(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    return output.getvalue()
+
 # --- MODAL POP-UP ---
 @st.dialog("Notification")
 def show_success_modal(message):
@@ -88,10 +95,9 @@ with st.sidebar:
             st.rerun()
     
     st.markdown("---")
-    ex_buf = io.BytesIO()
-    with pd.ExcelWriter(ex_buf, engine='xlsxwriter') as wr: 
-        st.session_state.df_master.to_excel(wr, index=False)
-    st.download_button("📊 DOWNLOAD DATABASE EXCEL", data=ex_buf.getvalue(), file_name="PO_Monitoring_NHM.xlsx")
+    # Bagian Download Master diletakkan di sidebar (Opsional tetap ada)
+    ex_buf_master = to_excel_buffer(st.session_state.df_master)
+    st.download_button("📊 DOWNLOAD MASTER DATABASE", data=ex_buf_master, file_name="Master_PO_NHM.xlsx")
 
 # --- 4. CSS CUSTOM ---
 def get_base64_image(image_path):
@@ -147,7 +153,7 @@ if st.session_state['authenticated']:
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         if f_po_multi: df_f = df_f[df_f['PO No'].isin(f_po_multi)]
-        if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
+        if search_q: df_f = df_f[df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]]
         
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
@@ -155,6 +161,12 @@ if st.session_state['authenticated']:
                 df_f = df_f[(df_f['Doc Date DT'] >= pd.to_datetime(date_range[0])) & (df_f['Doc Date DT'] <= pd.to_datetime(date_range[1]))]
                 df_f = df_f.drop(columns=['Doc Date DT'])
             except: pass
+
+        # REVISI: TOMBOL DOWNLOAD BERDASARKAN FILTER (ADMIN)
+        cd1, cd2 = st.columns([4, 1])
+        with cd2:
+            filtered_xlsx = to_excel_buffer(df_f)
+            st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx, file_name="PO_NHM_Filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         st.markdown("---")
         m1, m2, m3 = st.columns(3)
@@ -188,6 +200,7 @@ if st.session_state['authenticated']:
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
 
+    # ... tab_daily, tab_personal, tab_bulk tetap sama ...
     with tab_daily:
         st.markdown("### 📅 DAILY UPDATE")
         daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_admin_{st.session_state.daily_key}")
@@ -211,11 +224,9 @@ if st.session_state['authenticated']:
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
-
         csp1, csp2 = st.columns([2, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
         date_range_p = csp2.date_input("Filter Doc Date Range (Personal):", value=[], key="date_personal")
-        
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
@@ -227,13 +238,11 @@ if st.session_state['authenticated']:
                 df_p = df_p[(df_p['Doc Date DT'] >= pd.to_datetime(date_range_p[0])) & (df_p['Doc Date DT'] <= pd.to_datetime(date_range_p[1]))]
                 df_p = df_p.drop(columns=['Doc Date DT'])
             except: pass
-
         st.markdown("---")
         pm1, pm2, pm3 = st.columns(3)
         pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
         pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
         pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
-
         if not df_p.empty:
             gp1, gp2 = st.columns(2)
             with gp1:
@@ -251,10 +260,8 @@ if st.session_state['authenticated']:
                 unit_p_data = df_p_unit['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_p_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
-
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config={"Dept.": st.column_config.TextColumn("Dept.", disabled=False), "Fleet": st.column_config.TextColumn("Fleet", disabled=False), "Unit no": st.column_config.TextColumn("Unit no", disabled=False), "Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
-        
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_final = st.session_state.df_master.copy()
@@ -273,16 +280,9 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
-    # --- TAB UPDATE STATUS (REVISI: TAMBAH TOMBOL DELETE) ---
     with tab_bulk:
         st.markdown("### 🛠️ UPDATE STATUS")
-        input_bulk = st.data_editor(
-            pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), 
-            num_rows="dynamic", 
-            use_container_width=True, 
-            key=f"bulk_editor_admin_{st.session_state.bulk_key}"
-        )
-        
+        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
         c_save, c_del = st.columns(2)
         with c_save:
             if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table", use_container_width=True):
@@ -302,27 +302,20 @@ if st.session_state['authenticated']:
                         st.session_state.bulk_key += 1
                         show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
                 else: st.warning("Silakan masukkan PO No dan PO Item.")
-
-        # FITUR DELETE BARU
         with c_del:
             if st.button("🗑️ DELETE SELECTED PO", type="secondary", key="delete_bulk_table", use_container_width=True):
                 master_del = st.session_state.df_master.copy()
                 initial_count = len(master_del)
-                
                 for _, r in input_bulk.iterrows():
                     p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
                     if p_no != "":
-                        # Menghapus baris yang cocok dengan PO No dan PO Item
                         master_del = master_del[~((master_del['PO No'] == p_no) & (master_del['PO Item'] == p_item))]
-                
                 deleted_count = initial_count - len(master_del)
-                
                 if deleted_count > 0:
                     if save_final_changes(master_del):
                         st.session_state.bulk_key += 1
-                        show_success_modal(f"Berhasil menghapus {deleted_count} baris dari database!")
-                else: st.warning("Data PO yang dicari tidak ditemukan untuk dihapus.")
-
+                        show_success_modal(f"Berhasil menghapus {deleted_count} baris!")
+                else: st.warning("Data PO tidak ditemukan.")
         st.markdown("---")
         def execute_bulk_update_final(status_val, note_val):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -336,7 +329,7 @@ if st.session_state['authenticated']:
                     updated += 1
             if updated > 0 and save_final_changes(master_b_update):
                 st.session_state.bulk_key += 1
-                show_success_modal(f"{updated} Data Berhasil Update & Simpan Cloud!")
+                show_success_modal(f"{updated} Data Berhasil Update!")
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -358,12 +351,18 @@ else:
     st.markdown("### 🔍 Filter Monitoring")
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
+    
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept"), cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet"), cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit"), cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
+    fv_dept = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept")
+    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
+    fv_stat = cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
+    
     csv1, csv2, csv3 = st.columns([1.5, 1.5, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_v")
     f_po_multi_v = csv2.multiselect("Filter PO No:", get_v_options('PO No'), key="v_po_multi")
     v_date_range = csv3.date_input("Filter Doc Date Range:", value=[], key="date_v")
+    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
@@ -371,11 +370,20 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if f_po_multi_v: df_v = df_v[df_v['PO No'].isin(f_po_multi_v)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
+
+    # REVISI: TOMBOL DOWNLOAD BERDASARKAN FILTER (VIEWER)
+    cvd1, cvd2 = st.columns([4, 1])
+    with cvd2:
+        filtered_xlsx_v = to_excel_buffer(df_v)
+        st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx_v, file_name="PO_NHM_Filtered_View.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+    st.markdown("---")
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
