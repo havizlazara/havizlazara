@@ -17,7 +17,7 @@ if 'bulk_key' not in st.session_state:
 if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# REVISI: Urutan kolom resmi (Dept. diubah menjadi User)
+# Urutan kolom resmi yang ditampilkan di Aplikasi
 COLUMNS_ORDER = [
     'User', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
@@ -25,7 +25,6 @@ COLUMNS_ORDER = [
     'Last Update', 'Delivery Note'
 ]
 
-# REVISI: Kolom Personal Dashboard (Dept. diubah menjadi User)
 PERSONAL_COLS = [
     'User', 'Fleet', 'Unit no', 
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
@@ -40,12 +39,16 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
     
+    # Bersihkan nama kolom dari spasi
     data.columns = [str(c).strip() for c in data.columns]
     
-    # Mapping Dept. ke User jika database cloud masih menggunakan nama lama
-    if 'Dept.' in data.columns and 'User' not in data.columns:
+    # PERBAIKAN: Jika di Gsheet masih "Dept.", ubah namanya jadi "User" secara otomatis
+    if 'Dept.' in data.columns:
         data = data.rename(columns={'Dept.': 'User'})
+    elif 'Dept' in data.columns:
+        data = data.rename(columns={'Dept': 'User'})
         
+    # Pastikan semua kolom yang dibutuhkan ada
     for col in COLUMNS_ORDER:
         if col not in data.columns: data[col] = ""
     
@@ -72,10 +75,15 @@ def show_success_modal(message):
 
 def save_final_changes(df_to_save):
     try:
-        df_clean = df_to_save.drop(columns=['Pilih'], errors='ignore')
+        # Jika ingin simpan balik ke GSheet dengan nama kolom Dept. lagi (agar database tetap konsisten)
+        df_to_gsheet = df_to_save.copy()
+        if 'User' in df_to_gsheet.columns:
+            df_to_gsheet = df_to_gsheet.rename(columns={'User': 'Dept.'})
+            
+        df_clean = df_to_gsheet.drop(columns=['Pilih'], errors='ignore')
         conn.update(data=df_clean)
         st.cache_data.clear()
-        st.session_state.df_master = df_clean
+        st.session_state.df_master = df_to_save # State tetap pakai User
         return True
     except Exception as e:
         st.error(f"Gagal simpan ke Cloud: {e}")
@@ -146,7 +154,6 @@ if st.session_state['authenticated']:
         def get_options(col): return sorted([str(x).strip() for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
         
         c1, c2, c3, c4 = st.columns(4)
-        # REVISI: Label filter diubah menjadi User
         f_user = c1.multiselect("User", get_options('User'), key="m_user")
         f_fleet = c2.multiselect("Fleet", get_options('Fleet'), key="m_fleet")
         f_unit = c3.multiselect("Unit", get_options('Unit no'), key="m_unit")
@@ -279,7 +286,6 @@ if st.session_state['authenticated']:
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
 
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        # REVISI: column_config (User diubah dari Dept.)
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
             column_config={
                 "User": st.column_config.TextColumn("User", disabled=False), 
@@ -386,7 +392,6 @@ else:
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
     
     cv1, cv2, cv3, cv4 = st.columns(4)
-    # REVISI: Label filter viewer diubah menjadi User
     fv_user = cv1.multiselect("User", get_v_options('User'), key="v_user")
     fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
     fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
