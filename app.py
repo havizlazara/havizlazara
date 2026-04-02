@@ -35,7 +35,6 @@ PERSONAL_COLS = [
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # ttl=0 memastikan data ditarik segar dari server Google
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
@@ -133,7 +132,6 @@ if st.session_state['authenticated']:
     
     with tab_monitor:
         st.markdown("### 🔍 Filter Monitoring")
-        # REVISI: Tombol Refresh Data
         if st.button("🔄 REFRESH DATA", key="refresh_admin"):
             st.session_state.df_master = load_data()
             st.rerun()
@@ -227,9 +225,11 @@ if st.session_state['authenticated']:
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
+
         csp1, csp2 = st.columns([2, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
         date_range_p = csp2.date_input("Filter Doc Date Range (Personal):", value=[], key="date_personal")
+        
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
@@ -241,11 +241,19 @@ if st.session_state['authenticated']:
                 df_p = df_p[(df_p['Doc Date DT'] >= pd.to_datetime(date_range_p[0])) & (df_p['Doc Date DT'] <= pd.to_datetime(date_range_p[1]))]
                 df_p = df_p.drop(columns=['Doc Date DT'])
             except: pass
+
+        # REVISI: TAMBAHKAN TOMBOL DOWNLOAD BERDASARKAN FILTER (PERSONAL DASHBOARD)
+        cpd1, cpd2 = st.columns([4, 1])
+        with cpd2:
+            personal_filtered_xlsx = to_excel_buffer(df_p)
+            st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=personal_filtered_xlsx, file_name=f"PO_NHM_Personal_{f_pic_p}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
         st.markdown("---")
         pm1, pm2, pm3 = st.columns(3)
         pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
         pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
         pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+
         if not df_p.empty:
             gp1, gp2 = st.columns(2)
             with gp1:
@@ -263,8 +271,10 @@ if st.session_state['authenticated']:
                 unit_p_data = df_p_unit['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_p_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
+
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config={"Dept.": st.column_config.TextColumn("Dept.", disabled=False), "Fleet": st.column_config.TextColumn("Fleet", disabled=False), "Unit no": st.column_config.TextColumn("Unit no", disabled=False), "Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
             master_final = st.session_state.df_master.copy()
@@ -352,7 +362,6 @@ if st.session_state['authenticated']:
 else:
     # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring")
-    # REVISI: Tombol Refresh Data untuk Viewer
     if st.button("🔄 REFRESH DATA", key="refresh_viewer"):
         st.session_state.df_master = load_data()
         st.rerun()
