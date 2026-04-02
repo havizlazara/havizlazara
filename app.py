@@ -35,6 +35,7 @@ PERSONAL_COLS = [
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
+    # ttl=0 memastikan data ditarik segar dari server Google
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
@@ -95,7 +96,6 @@ with st.sidebar:
             st.rerun()
     
     st.markdown("---")
-    # Bagian Download Master diletakkan di sidebar (Opsional tetap ada)
     ex_buf_master = to_excel_buffer(st.session_state.df_master)
     st.download_button("📊 DOWNLOAD MASTER DATABASE", data=ex_buf_master, file_name="Master_PO_NHM.xlsx")
 
@@ -133,6 +133,11 @@ if st.session_state['authenticated']:
     
     with tab_monitor:
         st.markdown("### 🔍 Filter Monitoring")
+        # REVISI: Tombol Refresh Data
+        if st.button("🔄 REFRESH DATA", key="refresh_admin"):
+            st.session_state.df_master = load_data()
+            st.rerun()
+
         df_master_cur = st.session_state.df_master.copy()
         def get_options(col): return sorted([str(x).strip() for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
         
@@ -153,7 +158,7 @@ if st.session_state['authenticated']:
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
         if f_po_multi: df_f = df_f[df_f['PO No'].isin(f_po_multi)]
-        if search_q: df_f = df_f[df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]]
+        if search_q: df_f = df_f[df_f.apply(lambda r: r.astype(str).str.contains(search_q, case=False).any(), axis=1)]
         
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             try:
@@ -162,7 +167,6 @@ if st.session_state['authenticated']:
                 df_f = df_f.drop(columns=['Doc Date DT'])
             except: pass
 
-        # REVISI: TOMBOL DOWNLOAD BERDASARKAN FILTER (ADMIN)
         cd1, cd2 = st.columns([4, 1])
         with cd2:
             filtered_xlsx = to_excel_buffer(df_f)
@@ -200,7 +204,6 @@ if st.session_state['authenticated']:
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
 
-    # ... tab_daily, tab_personal, tab_bulk tetap sama ...
     with tab_daily:
         st.markdown("### 📅 DAILY UPDATE")
         daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_admin_{st.session_state.daily_key}")
@@ -349,20 +352,20 @@ if st.session_state['authenticated']:
 else:
     # --- VIEWER MODE ---
     st.markdown("### 🔍 Filter Monitoring")
+    # REVISI: Tombol Refresh Data untuk Viewer
+    if st.button("🔄 REFRESH DATA", key="refresh_viewer"):
+        st.session_state.df_master = load_data()
+        st.rerun()
+
     df_v_master = st.session_state.df_master.copy()
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
     
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept")
-    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
-    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
-    fv_stat = cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
-    
+    fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept"), cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet"), cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit"), cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
     csv1, csv2, csv3 = st.columns([1.5, 1.5, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_v")
     f_po_multi_v = csv2.multiselect("Filter PO No:", get_v_options('PO No'), key="v_po_multi")
     v_date_range = csv3.date_input("Filter Doc Date Range:", value=[], key="date_v")
-    
     df_v = df_v_master.copy()
     if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
@@ -370,20 +373,16 @@ else:
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if f_po_multi_v: df_v = df_v[df_v['PO No'].isin(f_po_multi_v)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
-    
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
-
-    # REVISI: TOMBOL DOWNLOAD BERDASARKAN FILTER (VIEWER)
     cvd1, cvd2 = st.columns([4, 1])
     with cvd2:
         filtered_xlsx_v = to_excel_buffer(df_v)
         st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx_v, file_name="PO_NHM_Filtered_View.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-
     st.markdown("---")
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
