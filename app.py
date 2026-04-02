@@ -17,16 +17,17 @@ if 'bulk_key' not in st.session_state:
 if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# Urutan kolom resmi
+# REVISI: Urutan kolom resmi (Dept. diubah menjadi User)
 COLUMNS_ORDER = [
-    'Dept.', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
+    'User', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Supplier', 'Status', 
     'Last Update', 'Delivery Note'
 ]
 
+# REVISI: Kolom Personal Dashboard (Dept. diubah menjadi User)
 PERSONAL_COLS = [
-    'Dept.', 'Fleet', 'Unit no', 
+    'User', 'Fleet', 'Unit no', 
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
 ]
@@ -38,9 +39,16 @@ def load_data():
     data = conn.read(ttl=0)
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
+    
     data.columns = [str(c).strip() for c in data.columns]
+    
+    # Mapping Dept. ke User jika database cloud masih menggunakan nama lama
+    if 'Dept.' in data.columns and 'User' not in data.columns:
+        data = data.rename(columns={'Dept.': 'User'})
+        
     for col in COLUMNS_ORDER:
         if col not in data.columns: data[col] = ""
+    
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
     for col in data.columns:
@@ -50,14 +58,12 @@ def load_data():
 if 'df_master' not in st.session_state:
     st.session_state.df_master = load_data()
 
-# Fungsi Utility Download Excel
 def to_excel_buffer(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
 
-# --- MODAL POP-UP ---
 @st.dialog("Notification")
 def show_success_modal(message):
     st.success(message)
@@ -140,7 +146,8 @@ if st.session_state['authenticated']:
         def get_options(col): return sorted([str(x).strip() for x in df_master_cur[col].dropna().unique() if str(x).strip() != "" and str(x).lower() != 'nan'])
         
         c1, c2, c3, c4 = st.columns(4)
-        f_dept = c1.multiselect("Dept", get_options('Dept.'), key="m_dept")
+        # REVISI: Label filter diubah menjadi User
+        f_user = c1.multiselect("User", get_options('User'), key="m_user")
         f_fleet = c2.multiselect("Fleet", get_options('Fleet'), key="m_fleet")
         f_unit = c3.multiselect("Unit", get_options('Unit no'), key="m_unit")
         f_stat = c4.multiselect("Status", get_options('Status'), key="m_stat")
@@ -151,7 +158,7 @@ if st.session_state['authenticated']:
         date_range = cs3.date_input("Filter Doc Date Range:", value=[], key="date_admin")
 
         df_f = df_master_cur.copy()
-        if f_dept: df_f = df_f[df_f['Dept.'].isin(f_dept)]
+        if f_user: df_f = df_f[df_f['User'].isin(f_user)]
         if f_fleet: df_f = df_f[df_f['Fleet'].isin(f_fleet)]
         if f_unit: df_f = df_f[df_f['Unit no'].isin(f_unit)]
         if f_stat: df_f = df_f[df_f['Status'].isin(f_stat)]
@@ -242,7 +249,6 @@ if st.session_state['authenticated']:
                 df_p = df_p.drop(columns=['Doc Date DT'])
             except: pass
 
-        # REVISI: TAMBAHKAN TOMBOL DOWNLOAD BERDASARKAN FILTER (PERSONAL DASHBOARD)
         cpd1, cpd2 = st.columns([4, 1])
         with cpd2:
             personal_filtered_xlsx = to_excel_buffer(df_p)
@@ -273,7 +279,17 @@ if st.session_state['authenticated']:
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
 
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config={"Dept.": st.column_config.TextColumn("Dept.", disabled=False), "Fleet": st.column_config.TextColumn("Fleet", disabled=False), "Unit no": st.column_config.TextColumn("Unit no", disabled=False), "Last Update": st.column_config.TextColumn("Last Update", disabled=True), "PO No": st.column_config.TextColumn("PO No", disabled=True), "PO Item": st.column_config.TextColumn("PO Item", disabled=True)})
+        # REVISI: column_config (User diubah dari Dept.)
+        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
+            column_config={
+                "User": st.column_config.TextColumn("User", disabled=False), 
+                "Fleet": st.column_config.TextColumn("Fleet", disabled=False), 
+                "Unit no": st.column_config.TextColumn("Unit no", disabled=False), 
+                "Last Update": st.column_config.TextColumn("Last Update", disabled=True), 
+                "PO No": st.column_config.TextColumn("PO No", disabled=True), 
+                "PO Item": st.column_config.TextColumn("PO Item", disabled=True)
+            }
+        )
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -370,18 +386,25 @@ else:
     def get_v_options(col): return sorted([str(x).strip() for x in df_v_master[col].unique() if x])
     
     cv1, cv2, cv3, cv4 = st.columns(4)
-    fv_dept, fv_fleet, fv_unit, fv_stat = cv1.multiselect("Dept", get_v_options('Dept.'), key="v_dept"), cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet"), cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit"), cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
+    # REVISI: Label filter viewer diubah menjadi User
+    fv_user = cv1.multiselect("User", get_v_options('User'), key="v_user")
+    fv_fleet = cv2.multiselect("Fleet", get_v_options('Fleet'), key="v_fleet")
+    fv_unit = cv3.multiselect("Unit", get_v_options('Unit no'), key="v_unit")
+    fv_stat = cv4.multiselect("Status", get_v_options('Status'), key="v_stat")
+    
     csv1, csv2, csv3 = st.columns([1.5, 1.5, 1])
     search_viewer = csv1.text_input("Global Search:", placeholder="Cari apapun...", key="gs_v")
     f_po_multi_v = csv2.multiselect("Filter PO No:", get_v_options('PO No'), key="v_po_multi")
     v_date_range = csv3.date_input("Filter Doc Date Range:", value=[], key="date_v")
+    
     df_v = df_v_master.copy()
-    if fv_dept: df_v = df_v[df_v['Dept.'].isin(fv_dept)]
+    if fv_user: df_v = df_v[df_v['User'].isin(fv_user)]
     if fv_fleet: df_v = df_v[df_v['Fleet'].isin(fv_fleet)]
     if fv_unit: df_v = df_v[df_v['Unit no'].isin(fv_unit)]
     if fv_stat: df_v = df_v[df_v['Status'].isin(fv_stat)]
     if f_po_multi_v: df_v = df_v[df_v['PO No'].isin(f_po_multi_v)]
     if search_viewer: df_v = df_v[df_v.apply(lambda r: r.astype(str).str.contains(search_viewer, case=False).any(), axis=1)]
+    
     if isinstance(v_date_range, (list, tuple)) and len(v_date_range) == 2:
         try:
             df_v['Doc Date DT'] = pd.to_datetime(df_v['Doc Date'], dayfirst=True, errors='coerce')
