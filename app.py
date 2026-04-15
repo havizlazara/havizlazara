@@ -17,7 +17,7 @@ if 'bulk_key' not in st.session_state:
 if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# Urutan kolom resmi yang ditampilkan di Aplikasi
+# Urutan kolom resmi
 COLUMNS_ORDER = [
     'User', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
@@ -39,16 +39,13 @@ def load_data():
     if data is None or data.empty:
         return pd.DataFrame(columns=COLUMNS_ORDER)
     
-    # Bersihkan nama kolom dari spasi
     data.columns = [str(c).strip() for c in data.columns]
     
-    # PERBAIKAN: Jika di Gsheet masih "Dept.", ubah namanya jadi "User" secara otomatis
     if 'Dept.' in data.columns:
         data = data.rename(columns={'Dept.': 'User'})
     elif 'Dept' in data.columns:
         data = data.rename(columns={'Dept': 'User'})
         
-    # Pastikan semua kolom yang dibutuhkan ada
     for col in COLUMNS_ORDER:
         if col not in data.columns: data[col] = ""
     
@@ -75,7 +72,6 @@ def show_success_modal(message):
 
 def save_final_changes(df_to_save):
     try:
-        # Jika ingin simpan balik ke GSheet dengan nama kolom Dept. lagi (agar database tetap konsisten)
         df_to_gsheet = df_to_save.copy()
         if 'User' in df_to_gsheet.columns:
             df_to_gsheet = df_to_gsheet.rename(columns={'User': 'Dept.'})
@@ -83,7 +79,7 @@ def save_final_changes(df_to_save):
         df_clean = df_to_gsheet.drop(columns=['Pilih'], errors='ignore')
         conn.update(data=df_clean)
         st.cache_data.clear()
-        st.session_state.df_master = df_to_save # State tetap pakai User
+        st.session_state.df_master = df_to_save 
         return True
     except Exception as e:
         st.error(f"Gagal simpan ke Cloud: {e}")
@@ -185,10 +181,12 @@ if st.session_state['authenticated']:
             st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx, file_name="PO_NHM_Filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         st.markdown("---")
-        m1, m2, m3 = st.columns(3)
+        # REVISI: Menampilkan 4 Metrik (Total, Outstanding, Partial, Complete)
+        m1, m2, m3, m4 = st.columns(4)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="metric-card" style="border-bottom-color:#f39c12;"><b>PARTIAL</b><h2>{len(df_f[df_f["Status"].str.contains("Partial", case=False)])}</h2></div>', unsafe_allow_html=True)
+        m4.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_f[df_f["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
 
         if not df_f.empty:
             g1, g2, g3 = st.columns(3)
@@ -262,10 +260,12 @@ if st.session_state['authenticated']:
             st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=personal_filtered_xlsx, file_name=f"PO_NHM_Personal_{f_pic_p}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         st.markdown("---")
-        pm1, pm2, pm3 = st.columns(3)
+        # REVISI: Menampilkan 4 Metrik di Personal Dashboard
+        pm1, pm2, pm3, pm4 = st.columns(4)
         pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
         pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
-        pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+        pm3.markdown(f'<div class="metric-card" style="border-bottom-color:#f39c12;"><b>PARTIAL</b><h2>{len(df_p[df_p["Status"].str.contains("Partial", case=False)])}</h2></div>', unsafe_allow_html=True)
+        pm4.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_p[df_p["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
 
         if not df_p.empty:
             gp1, gp2 = st.columns(2)
@@ -416,6 +416,14 @@ else:
             df_v = df_v[(df_v['Doc Date DT'] >= pd.to_datetime(v_date_range[0])) & (df_v['Doc Date DT'] <= pd.to_datetime(v_date_range[1]))]
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
+
+    # REVISI: Tampilkan 4 metrik di Viewer Mode juga
+    mv1, mv2, mv3, mv4 = st.columns(4)
+    mv1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_v)}</h2></div>', unsafe_allow_html=True)
+    mv2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_v[df_v["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
+    mv3.markdown(f'<div class="metric-card" style="border-bottom-color:#f39c12;"><b>PARTIAL</b><h2>{len(df_v[df_v["Status"].str.contains("Partial", case=False)])}</h2></div>', unsafe_allow_html=True)
+    mv4.markdown(f'<div class="metric-card" style="border-bottom-color:#22c55e;"><b>COMPLETE</b><h2>{len(df_v[df_v["Status"].str.contains("Complete", case=False)])}</h2></div>', unsafe_allow_html=True)
+
     cvd1, cvd2 = st.columns([4, 1])
     with cvd2:
         filtered_xlsx_v = to_excel_buffer(df_v)
