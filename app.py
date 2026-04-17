@@ -181,7 +181,6 @@ if st.session_state['authenticated']:
             st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx, file_name="PO_NHM_Filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         st.markdown("---")
-        # REVISI: Menampilkan 4 Metrik (Total, Outstanding, Partial, Complete)
         m1, m2, m3, m4 = st.columns(4)
         m1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_f)}</h2></div>', unsafe_allow_html=True)
         m2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_f[df_f["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
@@ -238,15 +237,20 @@ if st.session_state['authenticated']:
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
 
-        csp1, csp2 = st.columns([2, 1])
+        csp1, csp2, csp3 = st.columns([1.5, 1.5, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
-        date_range_p = csp2.date_input("Filter Doc Date Range (Personal):", value=[], key="date_personal")
+        # REVISI: Penambahan Filter Delivery Note
+        f_note_p = csp2.text_input("Filter Delivery Note:", placeholder="Cari di catatan...", key="note_personal")
+        date_range_p = csp3.date_input("Filter Doc Date Range:", value=[], key="date_personal")
         
         df_p = df_p_master.copy()
         if f_pic_p != "All": df_p = df_p[df_p['PIC'] == f_pic_p]
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
         if f_po_p_multi: df_p = df_p[df_p['PO No'].isin(f_po_p_multi)]
         if search_p: df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
+        # Logika Filter Delivery Note
+        if f_note_p: df_p = df_p[df_p['Delivery Note'].str.contains(f_note_p, case=False, na=False)]
+        
         if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
             try:
                 df_p['Doc Date DT'] = pd.to_datetime(df_p['Doc Date'], dayfirst=True, errors='coerce')
@@ -260,7 +264,6 @@ if st.session_state['authenticated']:
             st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=personal_filtered_xlsx, file_name=f"PO_NHM_Personal_{f_pic_p}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         st.markdown("---")
-        # REVISI: Menampilkan 4 Metrik di Personal Dashboard
         pm1, pm2, pm3, pm4 = st.columns(4)
         pm1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_p)}</h2></div>', unsafe_allow_html=True)
         pm2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_p[df_p["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
@@ -417,7 +420,6 @@ else:
             df_v = df_v.drop(columns=['Doc Date DT'])
         except: pass
 
-    # REVISI: Tampilkan 4 metrik di Viewer Mode juga
     mv1, mv2, mv3, mv4 = st.columns(4)
     mv1.markdown(f'<div class="metric-card"><b>TOTAL ITEMS</b><h2>{len(df_v)}</h2></div>', unsafe_allow_html=True)
     mv2.markdown(f'<div class="metric-card" style="border-bottom-color:#ef4444;"><b>OUTSTANDING</b><h2>{len(df_v[df_v["Status"].str.contains("Outstanding", case=False)])}</h2></div>', unsafe_allow_html=True)
