@@ -226,21 +226,29 @@ if st.session_state['authenticated']:
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
 
+    # --- TAB PERSONAL DASHBOARD (REVISI FILTER DELIVERY NOTE) ---
     with tab_personal:
         st.markdown("### 👤 PERSONAL DASHBOARD")
         df_p_master = st.session_state.df_master.copy()
+        
         cp1, cp2, cp3 = st.columns(3)
         pic_opts = sorted([str(x) for x in df_p_master['PIC'].unique() if x and str(x).lower() != 'nan'])
         f_pic_p = cp1.selectbox("Filter PIC Name:", options=["All"] + pic_opts)
+        
         stat_opts = sorted([str(x) for x in df_p_master['Status'].unique() if x and str(x).lower() != 'nan'])
         f_stat_p = cp2.multiselect("Filter Status:", options=stat_opts)
+        
         po_opts = sorted([str(x) for x in df_p_master['PO No'].unique() if x and str(x).lower() != 'nan'])
         f_po_p_multi = cp3.multiselect("Filter PO No (Multiple):", options=po_opts)
 
         csp1, csp2, csp3 = st.columns([1.5, 1.5, 1])
         search_p = csp1.text_input("Global Search (Personal):", placeholder="Cari data PIC ini...", key="gs_personal")
-        # REVISI: Penambahan Filter Delivery Note
-        f_note_p = csp2.text_input("Filter Delivery Note:", placeholder="Cari di catatan...", key="note_personal")
+        
+        # REVISI: Filter Delivery Note menggunakan Dropdown (Multiselect) + Opsi Blanks
+        note_list = sorted([str(x).strip() for x in df_p_master['Delivery Note'].unique() if str(x).strip() != ""])
+        note_opts = ["(Blanks)"] + note_list
+        f_note_p_multi = csp2.multiselect("Filter Delivery Note:", options=note_opts, key="note_personal")
+        
         date_range_p = csp3.date_input("Filter Doc Date Range:", value=[], key="date_personal")
         
         df_p = df_p_master.copy()
@@ -248,8 +256,15 @@ if st.session_state['authenticated']:
         if f_stat_p: df_p = df_p[df_p['Status'].isin(f_stat_p)]
         if f_po_p_multi: df_p = df_p[df_p['PO No'].isin(f_po_p_multi)]
         if search_p: df_p = df_p[df_p.apply(lambda r: r.astype(str).str.contains(search_p, case=False).any(), axis=1)]
-        # Logika Filter Delivery Note
-        if f_note_p: df_p = df_p[df_p['Delivery Note'].str.contains(f_note_p, case=False, na=False)]
+        
+        # LOGIKA FILTER DELIVERY NOTE DROPDOWN
+        if f_note_p_multi:
+            if "(Blanks)" in f_note_p_multi:
+                # Menampilkan yang kosong ATAU yang dipilih di dropdown
+                other_notes = [n for n in f_note_p_multi if n != "(Blanks)"]
+                df_p = df_p[(df_p['Delivery Note'].str.strip() == "") | (df_p['Delivery Note'].isin(other_notes))]
+            else:
+                df_p = df_p[df_p['Delivery Note'].isin(f_note_p_multi)]
         
         if isinstance(date_range_p, (list, tuple)) and len(date_range_p) == 2:
             try:
