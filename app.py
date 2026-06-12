@@ -32,11 +32,10 @@ PERSONAL_COLS = [
     'Delivery Date', 'DDP', 'Price', 'Total Value inc VAT', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
 ]
 
-# REVISI: Konfigurasi format accounting (pemisah ribuan) untuk kolom Price dan Total Value inc VAT
-# Menggunakan format "$#,##0.00" atau mirip accounting agar ada pemisah ribuan dan 2 angka desimal
+# REVISI PERBAIKAN: Mengubah format menjadi "%,.0f" agar memunculkan tanda pemisah ribuan accounting secara otomatis
 COLUMN_ACCOUNTING_CONFIG = {
-    "Price": st.column_config.NumberColumn("Price", format="%d", help="Price dengan pemisah ribuan"),
-    "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%d", help="Total Value inc VAT dengan pemisah ribuan")
+    "Price": st.column_config.NumberColumn("Price", format="%,.0f", help="Price dengan pemisah ribuan"),
+    "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%,.0f", help="Total Value inc VAT dengan pemisah ribuan")
 }
 
 # --- 2. KONEKSI DATA ---
@@ -60,10 +59,11 @@ def load_data():
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
     
-    # REVISI: Ubah kolom Price dan Total Value inc VAT menjadi numeric agar format accounting berfungsi, kolom lain tetap str
+    # Memastikan kolom Price dan Total Value inc VAT bersih dari teks/koma bawaan gsheet sebelum diubah ke angka numeric
     for col in data.columns:
         if col in ['Price', 'Total Value inc VAT']:
-            data[col] = pd.to_numeric(data[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+            data[col] = data[col].astype(str).str.replace(r'[\$,. ]', '', regex=True)
+            data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0)
         else:
             data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
     return data
@@ -224,7 +224,6 @@ if st.session_state['authenticated']:
 
         st.markdown("---")
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
-        # REVISI: Menambahkan column_config untuk tab Dashboard Admin
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height, column_config=COLUMN_ACCOUNTING_CONFIG)
 
     with tab_daily:
@@ -308,7 +307,6 @@ if st.session_state['authenticated']:
 
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
         
-        # REVISI: Menggabungkan konfigurasi kolom personal bawaan dengan format accounting baru
         PERSONAL_CONFIG = {
             "User": st.column_config.TextColumn("User", disabled=False), 
             "Fleet": st.column_config.TextColumn("Fleet", disabled=False), 
@@ -316,8 +314,8 @@ if st.session_state['authenticated']:
             "Last Update": st.column_config.TextColumn("Last Update", disabled=True), 
             "PO No": st.column_config.TextColumn("PO No", disabled=True), 
             "PO Item": st.column_config.TextColumn("PO Item", disabled=True),
-            "Price": st.column_config.NumberColumn("Price", format="%d"),
-            "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%d")
+            "Price": st.column_config.NumberColumn("Price", format="%,.0f"),
+            "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%,.0f")
         }
         
         edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config=PERSONAL_CONFIG)
@@ -454,6 +452,4 @@ else:
         st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx_v, file_name="PO_NHM_Filtered_View.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     st.markdown("---")
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
-    
-    # REVISI: Menambahkan column_config untuk tabel Viewer Mode
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe", column_config=COLUMN_ACCOUNTING_CONFIG)
