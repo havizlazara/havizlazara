@@ -59,7 +59,6 @@ def load_data():
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
     
-    # REVISI PERBAIKAN: Hanya menghapus $, koma ribuan, dan spasi. Titik desimal dipertahankan agar tidak merusak digit asli.
     for col in data.columns:
         if col in ['Price', 'Total Value inc VAT']:
             clean_val = data[col].astype(str).str.replace(r'[\$, ]', '', regex=True)
@@ -220,7 +219,15 @@ if st.session_state['authenticated']:
                 df_unit_chart = df_f[df_f['Unit no'].str.strip() != ""]
                 unit_data = df_unit_chart['Unit no'].value_counts().nlargest(5).reset_index()
                 unit_data.columns = ['Unit_No', 'Count']
-                st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units", text='Count'), use_container_width=True)
+                st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units (by Count)", text='Count'), use_container_width=True)
+
+            # REVISI: Penambahan Grafik baru Top 5 Units berdasarkan akumulasi Total Value inc VAT terbesar
+            df_unit_val_chart = df_f[df_f['Unit no'].str.strip() != ""]
+            if not df_unit_val_chart.empty:
+                df_unit_val = df_unit_val_chart.groupby('Unit no')['Total Value inc VAT'].sum().nlargest(5).reset_index()
+                df_unit_val.columns = ['Unit_No', 'Total_Value_inc_VAT']
+                df_unit_val['Value_Text'] = df_unit_val['Total_Value_inc_VAT'].map(lambda x: f"{x:,.0f}")
+                st.plotly_chart(px.bar(df_unit_val, x='Unit_No', y='Total_Value_inc_VAT', color='Unit_No', height=350, title="Top 5 Units by Total Value inc VAT", text='Value_Text'), use_container_width=True)
 
         st.markdown("---")
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
