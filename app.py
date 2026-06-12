@@ -32,7 +32,7 @@ PERSONAL_COLS = [
     'Delivery Date', 'DDP', 'Price', 'Total Value inc VAT', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
 ]
 
-# REVISI PERBAIKAN: Mengubah format menjadi "%,.0f" agar memunculkan tanda pemisah ribuan accounting secara otomatis
+# Konfigurasi format accounting (pemisah ribuan) untuk kolom Price dan Total Value inc VAT
 COLUMN_ACCOUNTING_CONFIG = {
     "Price": st.column_config.NumberColumn("Price", format="%,.0f", help="Price dengan pemisah ribuan"),
     "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%,.0f", help="Total Value inc VAT dengan pemisah ribuan")
@@ -59,11 +59,11 @@ def load_data():
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
     
-    # Memastikan kolom Price dan Total Value inc VAT bersih dari teks/koma bawaan gsheet sebelum diubah ke angka numeric
+    # REVISI PERBAIKAN: Hanya menghapus $, koma ribuan, dan spasi. Titik desimal dipertahankan agar tidak merusak digit asli.
     for col in data.columns:
         if col in ['Price', 'Total Value inc VAT']:
-            data[col] = data[col].astype(str).str.replace(r'[\$,. ]', '', regex=True)
-            data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0)
+            clean_val = data[col].astype(str).str.replace(r'[\$, ]', '', regex=True)
+            data[col] = pd.to_numeric(clean_val, errors='coerce').fillna(0)
         else:
             data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
     return data
