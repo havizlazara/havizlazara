@@ -17,7 +17,7 @@ if 'bulk_key' not in st.session_state:
 if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# REVISI: Mengubah nama 'Total value' menjadi 'Price' di urutan resmi kolom utama
+# Urutan resmi kolom utama
 COLUMNS_ORDER = [
     'User', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
@@ -25,12 +25,19 @@ COLUMNS_ORDER = [
     'Last Update', 'Delivery Note'
 ]
 
-# REVISI: Mengubah nama 'Total value' menjadi 'Price' pada Personal Dashboard
+# Kolom untuk Personal Dashboard
 PERSONAL_COLS = [
     'User', 'Fleet', 'Unit no', 
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
     'Delivery Date', 'DDP', 'Price', 'Total Value inc VAT', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
 ]
+
+# REVISI: Konfigurasi format accounting (pemisah ribuan) untuk kolom Price dan Total Value inc VAT
+# Menggunakan format "$#,##0.00" atau mirip accounting agar ada pemisah ribuan dan 2 angka desimal
+COLUMN_ACCOUNTING_CONFIG = {
+    "Price": st.column_config.NumberColumn("Price", format="%d", help="Price dengan pemisah ribuan"),
+    "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%d", help="Total Value inc VAT dengan pemisah ribuan")
+}
 
 # --- 2. KONEKSI DATA ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -52,8 +59,13 @@ def load_data():
     
     data = data.loc[:, ~data.columns.duplicated(keep='first')]
     data = data[COLUMNS_ORDER]
+    
+    # REVISI: Ubah kolom Price dan Total Value inc VAT menjadi numeric agar format accounting berfungsi, kolom lain tetap str
     for col in data.columns:
-        data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
+        if col in ['Price', 'Total Value inc VAT']:
+            data[col] = pd.to_numeric(data[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        else:
+            data[col] = data[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
     return data
 
 if 'df_master' not in st.session_state:
@@ -212,7 +224,8 @@ if st.session_state['authenticated']:
 
         st.markdown("---")
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
-        st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height)
+        # REVISI: Menambahkan column_config untuk tab Dashboard Admin
+        st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height, column_config=COLUMN_ACCOUNTING_CONFIG)
 
     with tab_daily:
         st.markdown("### 📅 DAILY UPDATE")
@@ -294,16 +307,20 @@ if st.session_state['authenticated']:
                 st.plotly_chart(px.bar(unit_p_data, x='Unit_No', y='Count', color='Unit_No', height=350, title=f"Top 5 Units for {f_pic_p}", text='Count'), use_container_width=True)
 
         p_height = min(max((len(df_p) + 1) * 35 + 50, 200), 600)
-        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", 
-            column_config={
-                "User": st.column_config.TextColumn("User", disabled=False), 
-                "Fleet": st.column_config.TextColumn("Fleet", disabled=False), 
-                "Unit no": st.column_config.TextColumn("Unit no", disabled=False), 
-                "Last Update": st.column_config.TextColumn("Last Update", disabled=True), 
-                "PO No": st.column_config.TextColumn("PO No", disabled=True), 
-                "PO Item": st.column_config.TextColumn("PO Item", disabled=True)
-            }
-        )
+        
+        # REVISI: Menggabungkan konfigurasi kolom personal bawaan dengan format accounting baru
+        PERSONAL_CONFIG = {
+            "User": st.column_config.TextColumn("User", disabled=False), 
+            "Fleet": st.column_config.TextColumn("Fleet", disabled=False), 
+            "Unit no": st.column_config.TextColumn("Unit no", disabled=False), 
+            "Last Update": st.column_config.TextColumn("Last Update", disabled=True), 
+            "PO No": st.column_config.TextColumn("PO No", disabled=True), 
+            "PO Item": st.column_config.TextColumn("PO Item", disabled=True),
+            "Price": st.column_config.NumberColumn("Price", format="%d"),
+            "Total Value inc VAT": st.column_config.NumberColumn("Total Value inc VAT", format="%d")
+        }
+        
+        edited_p_df = st.data_editor(df_p[PERSONAL_COLS], use_container_width=True, hide_index=True, height=p_height, key=f"personal_editor_admin", num_rows="fixed", column_config=PERSONAL_CONFIG)
         
         if st.button("🚀 CONFIRM REVISION & SAVE TO GSHEET", type="primary"):
             today_str = datetime.now().strftime("%d-%m-%Y")
@@ -319,7 +336,7 @@ if st.session_state['authenticated']:
                         master_final.loc[mask, 'Last Update'] = today_str
                         updated_count += 1
                     for col in PERSONAL_COLS:
-                        if col != 'Last Update': master_final.loc[mask, col] = str(row[col])
+                        if col != 'Last Update': master_final.loc[mask, col] = row[col]
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
@@ -437,4 +454,6 @@ else:
         st.download_button(label="📥 DOWNLOAD FILTERED EXCEL", data=filtered_xlsx_v, file_name="PO_NHM_Filtered_View.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     st.markdown("---")
     v_height = min(max((len(df_v) + 1) * 35 + 50, 200), 800)
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe")
+    
+    # REVISI: Menambahkan column_config untuk tabel Viewer Mode
+    st.dataframe(df_v, use_container_width=True, hide_index=True, height=v_height, key="viewer_dataframe", column_config=COLUMN_ACCOUNTING_CONFIG)
