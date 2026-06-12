@@ -17,19 +17,19 @@ if 'bulk_key' not in st.session_state:
 if 'daily_key' not in st.session_state:
     st.session_state.daily_key = 0
 
-# REVISI: Menambahkan 'Total value' dan 'Total Value inc VAT' ke urutan resmi kolom utama
+# REVISI: Mengubah nama 'Total value' menjadi 'Price' di urutan resmi kolom utama
 COLUMNS_ORDER = [
     'User', 'Fleet', 'Unit no', 'PIC', 'Resv', 'PR No', 'PR Item', 
     'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
-    'Delivery Date', 'DDP', 'Total value', 'Total Value inc VAT', 'Supplier', 'Status', 
+    'Delivery Date', 'DDP', 'Price', 'Total Value inc VAT', 'Supplier', 'Status', 
     'Last Update', 'Delivery Note'
 ]
 
-# REVISI: Menambahkan kedua kolom tersebut ke Personal Dashboard agar konsisten
+# REVISI: Mengubah nama 'Total value' menjadi 'Price' pada Personal Dashboard
 PERSONAL_COLS = [
     'User', 'Fleet', 'Unit no', 
     'Resv', 'Material', 'Short Text', 'Qty', 'Doc Date', 'PO No', 'PO Item', 
-    'Delivery Date', 'DDP', 'Total value', 'Total Value inc VAT', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
+    'Delivery Date', 'DDP', 'Price', 'Total Value inc VAT', 'Supplier', 'Status', 'Last Update', 'Delivery Note'
 ]
 
 # --- 2. KONEKSI DATA ---
