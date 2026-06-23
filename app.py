@@ -221,9 +221,10 @@ if st.session_state['authenticated']:
                 unit_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units (by Count)", text='Count'), use_container_width=True)
 
-            # REVISI: Penambahan Grafik baru Top 5 Units berdasarkan akumulasi Total Value inc VAT terbesar
-            df_unit_val_chart = df_f[df_f['Unit no'].str.strip() != ""]
+            # PERBAIKAN: Konversi paksa kolom ke numeric sebelum operasi groupby sum agar terhindar dari TypeError
+            df_unit_val_chart = df_f[df_f['Unit no'].str.strip() != ""].copy()
             if not df_unit_val_chart.empty:
+                df_unit_val_chart['Total Value inc VAT'] = pd.to_numeric(df_unit_val_chart['Total Value inc VAT'], errors='coerce').fillna(0)
                 df_unit_val = df_unit_val_chart.groupby('Unit no')['Total Value inc VAT'].sum().nlargest(5).reset_index()
                 df_unit_val.columns = ['Unit_No', 'Total_Value_inc_VAT']
                 df_unit_val['Value_Text'] = df_unit_val['Total_Value_inc_VAT'].map(lambda x: f"{x:,.0f}")
