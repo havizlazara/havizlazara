@@ -221,7 +221,6 @@ if st.session_state['authenticated']:
                 unit_data.columns = ['Unit_No', 'Count']
                 st.plotly_chart(px.bar(unit_data, x='Unit_No', y='Count', color='Unit_No', height=350, title="Top 5 Units (by Count)", text='Count'), use_container_width=True)
 
-            # PERBAIKAN: Konversi paksa kolom ke numeric sebelum operasi groupby sum agar terhindar dari TypeError
             df_unit_val_chart = df_f[df_f['Unit no'].str.strip() != ""].copy()
             if not df_unit_val_chart.empty:
                 df_unit_val_chart['Total Value inc VAT'] = pd.to_numeric(df_unit_val_chart['Total Value inc VAT'], errors='coerce').fillna(0)
@@ -346,56 +345,106 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
+    # --- TAB UPDATE STATUS (REVISI: IMPLEMENTASI EXCEL UPLOAD) ---
     with tab_bulk:
-        st.markdown("### 🛠️ UPDATE STATUS")
-        input_bulk = st.data_editor(pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"]), num_rows="dynamic", use_container_width=True, key=f"bulk_editor_admin_{st.session_state.bulk_key}")
+        st.markdown("### 🛠️ UPDATE STATUS MASSAL VIA EXCEL")
+        
+        # Pembuatan Template Excel secara dinamis
+        template_df = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
+        template_buffer = to_excel_buffer(template_df)
+        
+        c_tpl, c_upl = st.columns([1, 2])
+        with c_tpl:
+            st.write("1. Unduh template format pengisian:")
+            st.download_button(
+                label="📥 DOWNLOAD TEMPLATE EXCEL", 
+                data=template_buffer, 
+                file_name="Template_Update_Status_Massal.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with c_upl:
+            st.write("2. Unggah format Excel yang sudah diisi:")
+            uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx"], key=f"bulk_uploader_{st.session_state.bulk_key}")
+
+        # Parsing data jika ada file yang diunggah
+        input_bulk = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
+        if uploaded_file is not None:
+            try:
+                uploaded_df = pd.read_excel(uploaded_file)
+                uploaded_df.columns = [str(c).strip() for c in uploaded_df.columns]
+                # Validasi kesesuaian kolom template
+                required_cols = ["PO No", "PO Item", "Status", "Delivery Note"]
+                if all(col in uploaded_df.columns for col in required_cols):
+                    input_bulk = uploaded_df[required_cols].fillna("").astype(str)
+                    st.success(f"Berhasil membaca {len(input_bulk)} baris data dari Excel. Silakan klik aksi di bawah ini.")
+                    with st.expander("👁️ Lihat Data yang Diunggah"):
+                        st.dataframe(input_bulk, use_container_width=True)
+                else:
+                    st.error("Format Excel salah! Pastikan kolom bertuliskan: PO No, PO Item, Status, Delivery Note")
+            except Exception as e:
+                st.error(f"Gagal membaca file Excel: {e}")
+
+        st.markdown("---")
         c_save, c_del = st.columns(2)
         with c_save:
             if st.button("💾 SAVE ALL TO GSHEET", type="primary", key="save_bulk_table", use_container_width=True):
-                today_str = datetime.now().strftime("%d-%m-%Y")
-                master_copy = st.session_state.df_master.copy()
-                updated_count = 0
-                for _, r in input_bulk.iterrows():
-                    p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
-                    mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
-                    if mask.any() and p_no != "":
-                        master_copy.loc[mask, 'Status'] = "Outstanding"
-                        master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
-                        master_copy.loc[mask, 'Last Update'] = today_str
-                        updated_count += 1
-                if updated_count > 0:
-                    if save_final_changes(master_copy):
-                        st.session_state.bulk_key += 1
-                        show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
-                else: st.warning("Silakan masukkan PO No dan PO Item.")
+                if input_bulk.empty:
+                    st.warning("Silakan unggah file Excel yang berisi data terlebih dahulu.")
+                else:
+                    today_str = datetime.now().strftime("%d-%m-%Y")
+                    master_copy = st.session_state.df_master.copy()
+                    updated_count = 0
+                    for _, r in input_bulk.iterrows():
+                        p_no, p_item = str(r['PO No']).strip().replace('.0$', ''), str(r['PO Item']).strip().replace('.0$', '')
+                        mask = (master_copy['PO No'] == p_no) & (master_copy['PO Item'] == p_item)
+                        if mask.any() and p_no != "":
+                            master_copy.loc[mask, 'Status'] = "Outstanding"
+                            master_copy.loc[mask, 'Delivery Note'] = str(r['Delivery Note']).strip()
+                            master_copy.loc[mask, 'Last Update'] = today_str
+                            updated_count += 1
+                    if updated_count > 0:
+                        if save_final_changes(master_copy):
+                            st.session_state.bulk_key += 1
+                            show_success_modal(f"Berhasil mengupdate {updated_count} data menjadi Outstanding!")
+                    else: st.warning("Tidak ada PO No & PO Item yang cocok dengan database.")
+
         with c_del:
             if st.button("🗑️ DELETE SELECTED PO", type="secondary", key="delete_bulk_table", use_container_width=True):
-                master_del = st.session_state.df_master.copy()
-                initial_count = len(master_del)
-                for _, r in input_bulk.iterrows():
-                    p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
-                    if p_no != "":
-                        master_del = master_del[~((master_del['PO No'] == p_no) & (master_del['PO Item'] == p_item))]
-                deleted_count = initial_count - len(master_del)
-                if deleted_count > 0:
-                    if save_final_changes(master_del):
-                        st.session_state.bulk_key += 1
-                        show_success_modal(f"Berhasil menghapus {deleted_count} baris!")
-                else: st.warning("Data PO tidak ditemukan.")
+                if input_bulk.empty:
+                    st.warning("Silakan unggah file Excel yang berisi data terlebih dahulu.")
+                else:
+                    master_del = st.session_state.df_master.copy()
+                    initial_count = len(master_del)
+                    for _, r in input_bulk.iterrows():
+                        p_no, p_item = str(r['PO No']).strip().replace('.0$', ''), str(r['PO Item']).strip().replace('.0$', '')
+                        if p_no != "":
+                            master_del = master_del[~((master_del['PO No'] == p_no) & (master_del['PO Item'] == p_item))]
+                    deleted_count = initial_count - len(master_del)
+                    if deleted_count > 0:
+                        if save_final_changes(master_del):
+                            st.session_state.bulk_key += 1
+                            show_success_modal(f"Berhasil menghapus {deleted_count} baris!")
+                    else: st.warning("Data PO tidak ditemukan di database.")
+
         st.markdown("---")
         def execute_bulk_update_final(status_val, note_val):
-            today_str = datetime.now().strftime("%d-%m-%Y")
-            master_b_update = st.session_state.df_master.copy()
-            updated = 0
-            for _, r in input_bulk.iterrows():
-                p_no, p_item = str(r['PO No']).strip(), str(r['PO Item']).strip()
-                mask = (master_b_update['PO No'] == p_no) & (master_b_update['PO Item'] == p_item)
-                if mask.any() and p_no != "":
-                    master_b_update.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
-                    updated += 1
-            if updated > 0 and save_final_changes(master_b_update):
-                st.session_state.bulk_key += 1
-                show_success_modal(f"{updated} Data Berhasil Update!")
+            if input_bulk.empty:
+                st.warning("Silakan unggah file Excel yang berisi data terlebih dahulu.")
+            else:
+                today_str = datetime.now().strftime("%d-%m-%Y")
+                master_b_update = st.session_state.df_master.copy()
+                updated = 0
+                for _, r in input_bulk.iterrows():
+                    p_no, p_item = str(r['PO No']).strip().replace('.0$', ''), str(r['PO Item']).strip().replace('.0$', '')
+                    mask = (master_b_update['PO No'] == p_no) & (master_b_update['PO Item'] == p_item)
+                    if mask.any() and p_no != "":
+                        master_b_update.loc[mask, ['Status', 'Delivery Note', 'Last Update']] = [status_val, note_val, today_str]
+                        updated += 1
+                if updated > 0 and save_final_changes(master_b_update):
+                    st.session_state.bulk_key += 1
+                    show_success_modal(f"{updated} Data Berhasil Update!")
+                else: st.warning("Tidak ada PO No & PO Item yang cocok dengan database.")
 
         c1, c2, c3 = st.columns(3)
         with c1:
