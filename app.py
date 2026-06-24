@@ -233,18 +233,82 @@ if st.session_state['authenticated']:
         dynamic_height = min(max((len(df_f) + 1) * 35 + 50, 200), 800)
         st.dataframe(df_f, use_container_width=True, hide_index=True, height=dynamic_height, column_config=COLUMN_ACCOUNTING_CONFIG)
 
+    # --- TAB DAILY UPDATE (REVISI: IMPLEMENTASI EXCEL UPLOAD + MANUAL EDIT) ---
     with tab_daily:
         st.markdown("### 📅 DAILY UPDATE")
-        daily_input = st.data_editor(pd.DataFrame(columns=COLUMNS_ORDER), num_rows="dynamic", use_container_width=True, key=f"daily_editor_admin_{st.session_state.daily_key}")
+        
+        # 1. Unduh Template Cetakan Kosong Berdasarkan Kolom Database Utama
+        daily_template_df = pd.DataFrame(columns=COLUMNS_ORDER)
+        daily_template_buffer = to_excel_buffer(daily_template_df)
+        
+        c_daily_tpl, c_daily_upl = st.columns([1, 2])
+        with c_daily_tpl:
+            st.write("1. Unduh template format data baru:")
+            st.download_button(
+                label="📥 DOWNLOAD TEMPLATE DAILY EXCEL", 
+                data=daily_template_buffer, 
+                file_name="Template_Daily_Update_PO.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with c_daily_upl:
+            st.write("2. Unggah file Excel berisi data baru (Opsional):")
+            uploaded_daily_file = st.file_uploader("Pilih file Excel", type=["xlsx"], key=f"daily_uploader_{st.session_state.daily_key}")
+
+        # Inisialisasi awal DataFrame editor dari session_state atau file upload
+        initial_daily_df = pd.DataFrame(columns=COLUMNS_ORDER)
+        if uploaded_daily_file is not None:
+            try:
+                uploaded_df = pd.read_excel(uploaded_daily_file)
+                uploaded_df.columns = [str(c).strip() for c in uploaded_df.columns]
+                
+                # Menyesuaikan jika ada kolom lama 'Dept.'
+                if 'Dept.' in uploaded_df.columns:
+                    uploaded_df = uploaded_df.rename(columns={'Dept.': 'User'})
+                elif 'Dept' in uploaded_df.columns:
+                    uploaded_df = uploaded_df.rename(columns={'Dept': 'User'})
+
+                # Masukkan kolom yang kurang
+                for col in COLUMNS_ORDER:
+                    if col not in uploaded_df.columns:
+                        uploaded_df[col] = ""
+                
+                initial_daily_df = uploaded_df[COLUMNS_ORDER].fillna("").astype(str)
+                st.success(f"Berhasil memuat {len(initial_daily_df)} data dari Excel ke tabel di bawah. Anda masih bisa mengeditnya secara manual sebelum menyimpan.")
+            except Exception as e:
+                st.error(f"Gagal membaca file Excel: {e}")
+
+        st.write("3. Periksa kembali atau input data manual langsung pada tabel berikut:")
+        daily_input = st.data_editor(
+            initial_daily_df, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key=f"daily_editor_admin_{st.session_state.daily_key}"
+        )
+        
         if st.button("🚀 INSERT & AUTO SAVE"):
+            # Memfilter baris yang kolom PO No tidak kosong
             clean_new = daily_input[daily_input['PO No'].astype(str).str.strip() != ""].copy()
             if not clean_new.empty:
                 today_str = datetime.now().strftime("%d-%m-%Y")
-                clean_new['Status'], clean_new['Last Update'] = "Outstanding", today_str
+                
+                # Memastikan data teks bersih dan angka dikonversi dengan benar
+                for col in clean_new.columns:
+                    if col in ['Price', 'Total Value inc VAT']:
+                        clean_val = clean_new[col].astype(str).str.replace(r'[\$, ]', '', regex=True)
+                        clean_new[col] = pd.to_numeric(clean_val, errors='coerce').fillna(0)
+                    else:
+                        clean_new[col] = clean_new[col].fillna("").astype(str).str.replace(r'^nan$', '', regex=True).str.replace(r'\.0$', '', regex=True)
+                
+                clean_new['Status'] = "Outstanding"
+                clean_new['Last Update'] = today_str
+                
                 new_master = pd.concat([st.session_state.df_master, clean_new], ignore_index=True)
                 if save_final_changes(new_master):
                     st.session_state.daily_key += 1
                     show_success_modal("Data Baru Berhasil Masuk Cloud!")
+            else:
+                st.warning("Tidak ada data PO valid yang bisa disimpan. Pastikan kolom 'PO No' tidak kosong.")
 
     with tab_personal:
         st.markdown("### 👤 PERSONAL DASHBOARD")
@@ -345,11 +409,8 @@ if st.session_state['authenticated']:
             if save_final_changes(master_final):
                 show_success_modal(f"Berhasil Merevisi {updated_count} baris!")
 
-    # --- TAB UPDATE STATUS (REVISI: IMPLEMENTASI EXCEL UPLOAD) ---
     with tab_bulk:
         st.markdown("### 🛠️ UPDATE STATUS MASSAL VIA EXCEL")
-        
-        # Pembuatan Template Excel secara dinamis
         template_df = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
         template_buffer = to_excel_buffer(template_df)
         
@@ -367,13 +428,11 @@ if st.session_state['authenticated']:
             st.write("2. Unggah format Excel yang sudah diisi:")
             uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx"], key=f"bulk_uploader_{st.session_state.bulk_key}")
 
-        # Parsing data jika ada file yang diunggah
         input_bulk = pd.DataFrame(columns=["PO No", "PO Item", "Status", "Delivery Note"])
         if uploaded_file is not None:
             try:
                 uploaded_df = pd.read_excel(uploaded_file)
                 uploaded_df.columns = [str(c).strip() for c in uploaded_df.columns]
-                # Validasi kesesuaian kolom template
                 required_cols = ["PO No", "PO Item", "Status", "Delivery Note"]
                 if all(col in uploaded_df.columns for col in required_cols):
                     input_bulk = uploaded_df[required_cols].fillna("").astype(str)
